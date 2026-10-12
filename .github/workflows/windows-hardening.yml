@@ -33,6 +33,10 @@ jobs:
           for rid in win-x64 win-arm64; do
             dotnet publish test/HardeningCheck/HardeningCheck.csproj -r "$rid" -c Release \
               -p:BaseIntermediateOutputPath="$RUNNER_TEMP/obj/hc-$rid/" -o "out/$rid/hardening"
+            # Control: same program without CFG, to show the fail-fast below
+            # comes from CFG and not from something else.
+            dotnet publish test/HardeningCheck/HardeningCheck.csproj -r "$rid" -c Release -p:ControlFlowGuard=None \
+              -p:BaseIntermediateOutputPath="$RUNNER_TEMP/obj/hc-nocfg-$rid/" -o "out/$rid/hardening-nocfg"
             dotnet publish test/Hello.csproj -r "$rid" -c Release -p:InvariantGlobalization=true \
               -p:BaseIntermediateOutputPath="$RUNNER_TEMP/obj/hello-$rid/" -o "out/$rid/hello"
             dotnet publish test/Hello.csproj -r "$rid" -c Release -p:AotAnywhereSelfTest=true \
@@ -90,6 +94,17 @@ jobs:
           "exit code: $code (0x{0:X8})" -f $code
           # STATUS_STACK_BUFFER_OVERRUN: the __fastfail CFG raises.
           if ($code -ne -1073740791) { throw "expected a CFG fail-fast (0xC0000409), got $code" }
+          exit 0
+
+      - name: Control without CFG
+        run: |
+          & "out/${{ matrix.rid }}/hardening-nocfg/HardeningCheck.exe"
+          if ($LASTEXITCODE -ne 1) { throw "control build: expected CFG disabled (exit 1), got $LASTEXITCODE" }
+          & "out/${{ matrix.rid }}/hardening-nocfg/HardeningCheck.exe" --violate
+          $code = $LASTEXITCODE
+          "control exit code: $code (0x{0:X8})" -f $code
+          if ($code -eq -1073740791) { throw "control build also fail-fasted; the CFG check above proves nothing" }
+          exit 0
 
       - name: Hello and selftest still run
         run: |
