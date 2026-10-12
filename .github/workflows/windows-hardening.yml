@@ -103,7 +103,8 @@ jobs:
           & "out/${{ matrix.rid }}/hardening-nocfg/HardeningCheck.exe" --violate
           $code = $LASTEXITCODE
           "control exit code: $code (0x{0:X8})" -f $code
-          if ($code -eq -1073740791) { throw "control build also fail-fasted; the CFG check above proves nothing" }
+          # Without CFG the call is legitimate code and returns normally.
+          if ($code -ne 3) { throw "control build: expected the call to succeed (exit 3), got $code" }
           exit 0
 
       - name: Hello and selftest still run
