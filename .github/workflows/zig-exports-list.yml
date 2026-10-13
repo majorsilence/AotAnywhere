@@ -122,6 +122,8 @@ jobs:
 
       - name: Run
         run: |
+          # Collect every result rather than stopping at the first crash.
+          set +e
           cd "out/${{ matrix.rid }}"
           for b in hello/Hello selftest/Hello lib/HelloLib.dylib; do
             chmod +x "$b"; codesign -s - -f "$b" 2>&1 | grep -v "replacing existing signature" || true
