@@ -1,0 +1,37 @@
+<Project>
+
+  <!-- MSBuild SDK consumption (<Sdk Name="StuDev.AotAnywhere.Apple" Version="..." />), for the
+       same reason as StuDev.AotAnywhere's Sdk.props: NuGet cannot restore a PackageReference
+       declared inside a package's build/ targets (NuGet/Home#4790), so the Zig toolset is
+       declared here, where restore sees it. All real logic lives in
+       build/StuDev.AotAnywhere.Apple.targets, pulled in through the self reference below. -->
+
+  <PropertyGroup>
+    <!-- Baked in at pack time (BakeSdkProps in StuDev.AotAnywhere.Apple.nuproj). -->
+    <AotAnywhereApplePackageVersion Condition="'$(AotAnywhereApplePackageVersion)' == ''">__AOTANYWHERE_PACKAGE_VERSION__</AotAnywhereApplePackageVersion>
+    <ZigVersion Condition="'$(ZigVersion)' == ''">__AOTANYWHERE_ZIG_VERSION__</ZigVersion>
+    <HostRuntimeIdentifier Condition="'$(HostRuntimeIdentifier)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</HostRuntimeIdentifier>
+
+    <!-- Tells ZigResolve.targets its own (restore-invisible) Zig reference is superseded. -->
+    <_AotAnywhereZigRefViaSdk>true</_AotAnywhereZigRefViaSdk>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="StuDev.AotAnywhere.Apple"
+      Version="$(AotAnywhereApplePackageVersion)"
+      PrivateAssets="all"
+      IsImplicitlyDefined="true" />
+
+    <!-- Zig for the build host. The target framework isn't known yet in SDK props, so this
+         is unconditional (referencing this SDK means building for Apple platforms); skipped
+         when StuDev.AotAnywhere's Sdk.props already added it (items, unlike properties,
+         evaluate in order, so this sees an earlier reference). -->
+    <PackageReference Include="Vezel.Zig.Toolsets.$(HostRuntimeIdentifier)"
+      Version="$(ZigVersion)"
+      PrivateAssets="all"
+      IsImplicitlyDefined="true"
+      GeneratePathProperty="true"
+      Condition="'$(UseExternalZig)' != 'true' and '$(HostRuntimeIdentifier)' != '' and '@(PackageReference->WithMetadataValue('Identity', 'Vezel.Zig.Toolsets.$(HostRuntimeIdentifier)'))' == ''" />
+  </ItemGroup>
+
+</Project>

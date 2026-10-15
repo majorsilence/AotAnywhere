@@ -1,0 +1,347 @@
+using System.Diagnostics;
+using AotAnywhere.AppleTools;
+using AotAnywhere.AppleTools.Xip;
+
+// Usage: AotAnywhere.AppleTools <tool> [args...]
+// The generated PATH wrappers (xcrun, clang, clang++, codesign, ...) pass their own name as <tool>.
+try
+{
+    if (args.Length == 0)
+        throw new AppleToolException("usage: AotAnywhere.AppleTools <tool> [args...]");
+    return Tools.Run(args[0], args.Skip(1).ToList());
+}
+catch (AppleToolException e)
+{
+    Console.Error.WriteLine(e.Message);
+    return 1;
+}
+
+static class Tools
+{
+    public static int Run(string tool, List<string> args) => tool switch
+    {
+        "xcrun" => Xcrun(args),
+        "clang" or "clang++" => Clang(tool, args),
+        "install_name_tool" => InstallNameTool(args),
+        "codesign" => Codesign(args),
+        "strip" => Strip(args),
+        "dsymutil" => DSymUtil(args),
+        "import-xcode" => ImportXcode(args),
+        "objc-shims" => ObjCShimsTool(args),
+        // Spotlight indexing of the build output; meaningless off-Mac.
+        "mdimport" => 0,
+        // On a Mac with Xcode (AotAnywhereAppleForce), defer anything not reimplemented here.
+        _ when OperatingSystem.IsMacOS() && File.Exists(AppleXcrun) => Exec(AppleXcrun, [tool, .. args]),
+        _ => throw new AppleToolException($"AotAnywhere: the Xcode tool '{tool}' is not available off-Mac. If the project uses a feature that needs it (storyboards, asset catalogs, Metal shaders, Core ML models, ...), it can only be built on a Mac with Xcode."),
+    };
+
+    const string AppleXcrun = "/usr/bin/xcrun";
+
+    // xcrun [-sdk|--sdk <sdk>] (--show-sdk-path | --show-sdk-version | --show-sdk-platform-path | -f <tool> | <tool> args...)
+    static int Xcrun(List<string> args)
+    {
+        string sdk = "iphoneos";
+        int i = 0;
+        for (; i < args.Count; i++)
+        {
+            string a = args[i];
+            if (a is "-sdk" or "--sdk")
+            {
+                sdk = NextArg(args, ref i, a);
+                continue;
+            }
+            if (a is "-v" or "--verbose" or "-l" or "--log" or "-n" or "--no-cache" or "-k" or "--kill-cache")
+                continue;
+            if (a == "--show-sdk-path")
+                return Print(AppleSdk.SdkPath(DeveloperDir(), sdk));
+            if (a == "--show-sdk-platform-path")
+                return Print(AppleSdk.PlatformPath(DeveloperDir(), sdk));
+            if (a == "--show-sdk-version")
+                return Print(SdkVersion(AppleSdk.SdkPath(DeveloperDir(), sdk), AppleSdk.PlatformName(sdk)));
+            if (a is "-f" or "--find")
+                return Print(Path.Combine(ToolsBin(), NextArg(args, ref i, a)));
+            break;
+        }
+        if (i >= args.Count)
+            throw new AppleToolException("AotAnywhere: xcrun was called without a tool.");
+        return Run(args[i], args.Skip(i + 1).ToList());
+    }
+
+    static int Clang(string tool, List<string> args)
+    {
+        // The ILCompiler targets probe `clang --version` to pick linker workarounds for specific
+        // Xcode releases; report a version none of them apply to.
+        if (args is ["--version"] or ["-v"])
+            return Print($"Apple clang version 17.0.0 (AotAnywhere: zig cc)\nTarget: arm64-apple-darwin\nThread model: posix");
+
+        // Set by the Apple package's targets when compiling against generated declarations
+        // (AotAnywhereAppleGeneratedHeaders) instead of the SDK's headers.
+        HeaderShims? shims = null;
+        if (Environment.GetEnvironmentVariable("AOTANYWHERE_OBJC_SHIMS") is { Length: > 0 } shimDir)
+        {
+            shims = new HeaderShims(shimDir, Path.Combine(Path.GetDirectoryName(Zig())!, "lib", "libc", "include", "any-darwin-any"));
+            // Non-umbrella framework headers (<CoreImage/CIFilterBuiltins.h>) are only known
+            // once the generated sources exist.
+            foreach (var source in args.Where(a => !a.StartsWith('-') && File.Exists(a) && Path.GetExtension(a) is ".m" or ".mm" or ".c" or ".cpp"))
+                foreach (var header in ObjCShims.FrameworkImports(source))
+                    ObjCShims.EnsureHeader(shimDir, header);
+        }
+
+        var inv = ClangToZig.Translate(tool, args, shims);
+        if (!args.Contains("-c"))
+            inv = inv with { Args = [.. inv.Args, .. Autolink(args, inv.Args)] };
+        int exit = RunZig(inv);
+        // Like clang, leave no output behind on failure: zig can leave an empty object, which
+        // the workload's incremental build would then take as up to date.
+        if (exit != 0 && args.IndexOf("-o") is int o and >= 0 && o + 1 < args.Count && File.Exists(args[o + 1]))
+            File.Delete(args[o + 1]);
+        return exit;
+    }
+
+    // The libraries and frameworks the link's objects ask for through LC_LINKER_OPTION.
+    static List<string> Autolink(List<string> clangArgs, IReadOnlyList<string> zigArgs)
+    {
+        int a = clangArgs.IndexOf("-arch");
+        if (a < 0 || a + 1 >= clangArgs.Count)
+            return [];
+        var inputs = clangArgs.Where(x => !x.StartsWith('-') && (x.EndsWith(".a", StringComparison.Ordinal) || x.EndsWith(".o", StringComparison.Ordinal)) && File.Exists(x)).ToList();
+        // Static frameworks (xcframework slices, e.g. MAUI's Swift interop library) linked by name.
+        var frameworkDirs = SearchDirs(clangArgs, "-F");
+        for (int i = 0; i + 1 < clangArgs.Count; i++)
+            if (clangArgs[i] is "-framework" or "-weak_framework")
+                inputs.AddRange(frameworkDirs.Select(d => Path.Combine(d, clangArgs[i + 1] + ".framework", clangArgs[i + 1])).Where(File.Exists).Take(1));
+        var options = MachoAutolink.Collect(inputs, clangArgs[a + 1]);
+        return MachoAutolink.Resolve(options, SearchDirs(zigArgs, "-L"), SearchDirs(zigArgs, "-F"), zigArgs.ToList());
+    }
+
+    static List<string> SearchDirs(IReadOnlyList<string> args, string flag)
+    {
+        var dirs = new List<string>();
+        for (int i = 0; i < args.Count; i++)
+        {
+            if (args[i] == flag && i + 1 < args.Count)
+                dirs.Add(args[++i]);
+            else if (args[i].StartsWith(flag, StringComparison.Ordinal) && args[i].Length > flag.Length)
+                dirs.Add(args[i][flag.Length..]);
+        }
+        return dirs;
+    }
+
+    static int RunZig(ZigInvocation inv)
+    {
+        var linkArgs = inv.Args.ToList();
+        if (inv.Sections is { Count: > 0 })
+        {
+            var dir = Directory.CreateTempSubdirectory("aotanywhere-sect-").FullName;
+            try
+            {
+                for (int i = 0; i < inv.Sections.Count; i++)
+                {
+                    string asm = Path.Combine(dir, $"sect{i}.s"), obj = Path.Combine(dir, $"sect{i}.o");
+                    File.WriteAllText(asm, ClangToZig.SectionAssembly(inv.Sections[i]));
+                    int rc = Exec(Zig(), ["cc", ClangToZig.TargetOf(inv), "-c", asm, "-o", obj]);
+                    if (rc != 0)
+                        return rc;
+                    linkArgs.Add(obj);
+                }
+                return Exec(Zig(), [inv.Driver, .. linkArgs]);
+            }
+            finally
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+        return Exec(Zig(), [inv.Driver, .. linkArgs]);
+    }
+
+    // install_name_tool [-id <name>] [-change <old> <new>]... <file>
+    static int InstallNameTool(List<string> args)
+    {
+        string? id = null;
+        var changes = new List<(string, string)>();
+        string? file = null;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "-id":
+                    id = NextArg(args, ref i, "-id");
+                    break;
+                case "-change":
+                    changes.Add((NextArg(args, ref i, "-change"), NextArg(args, ref i, "-change")));
+                    break;
+                default:
+                    if (args[i].StartsWith('-'))
+                        throw new AppleToolException($"AotAnywhere: install_name_tool option '{args[i]}' is not supported.");
+                    file = args[i];
+                    break;
+            }
+        }
+        if (file is null)
+            throw new AppleToolException("AotAnywhere: install_name_tool was called without a file.");
+        File.WriteAllBytes(file, MachoInstallName.Edit(File.ReadAllBytes(file), id, changes));
+        return 0;
+    }
+
+    // codesign [-v] [--force] [--timestamp[=none]] --sign <identity> [--entitlements <file>]
+    //          [--generate-entitlement-der] [--keychain <kc>] [--allocate <path>] <path>...
+    // "-" signs ad-hoc (simulator builds). Any other identity is the certificate in the .p12
+    // the Apple package's targets point AOTANYWHERE_SIGN_P12 at (there is no keychain off-Mac).
+    static int Codesign(List<string> args)
+    {
+        string? identity = null, entitlementsFile = null;
+        var paths = new List<string>();
+        for (int i = 0; i < args.Count; i++)
+        {
+            string a = args[i];
+            switch (a)
+            {
+                case "-s" or "--sign":
+                    identity = NextArg(args, ref i, a);
+                    break;
+                case "--entitlements":
+                    entitlementsFile = NextArg(args, ref i, a);
+                    break;
+                // Paths to keychain / codesign_allocate: meaningless here.
+                case "--keychain" or "--allocate" or "--options" or "-o":
+                    NextArg(args, ref i, a);
+                    break;
+                // The DER entitlements are always generated (iOS 15+ requires them).
+                case "-v" or "-f" or "--force" or "--generate-entitlement-der" or "--timestamp" or "--timestamp=none" or "--preserve-metadata=entitlements":
+                    break;
+                default:
+                    if (a.StartsWith('-'))
+                        throw new AppleToolException($"AotAnywhere: codesign option '{a}' is not supported.");
+                    paths.Add(a);
+                    break;
+            }
+        }
+        if (identity is null)
+            throw new AppleToolException("AotAnywhere: codesign was called without --sign.");
+
+        SigningIdentity? signer = identity == "-" ? null : SigningIdentities.Load(identity);
+        byte[]? entitlements = entitlementsFile is null ? null : File.ReadAllBytes(entitlementsFile);
+
+        foreach (var path in paths)
+        {
+            string full = Path.TrimEndingDirectorySeparator(path);
+            if (Directory.Exists(full))
+            {
+                BundleSigner.Sign(full, signer, entitlements);
+            }
+            else
+            {
+                var signed = MachoSigner.Sign(File.ReadAllBytes(full), new SignOptions(Path.GetFileNameWithoutExtension(full), signer, entitlements));
+                File.WriteAllBytes(full, signed);
+            }
+            Console.Error.WriteLine($"{path}: signed {(signer is null ? "ad-hoc" : "with " + signer.CommonName)}");
+        }
+        return 0;
+    }
+
+    // import-xcode (--xip <Xcode.xip> | --from <Xcode.app>) --out <dir>
+    static int ImportXcode(List<string> args)
+    {
+        string? xip = null, from = null, output = null;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--xip": xip = NextArg(args, ref i, "--xip"); break;
+                case "--from": from = NextArg(args, ref i, "--from"); break;
+                case "--out": output = NextArg(args, ref i, "--out"); break;
+                default: throw new AppleToolException($"AotAnywhere: unknown import-xcode option '{args[i]}'.");
+            }
+        }
+        if (output is null || (xip is null) == (from is null))
+            throw new AppleToolException("usage: import-xcode (--xip <Xcode.xip> | --from <Xcode.app>) --out <dir>");
+
+        var sw = Stopwatch.StartNew();
+        if (xip is not null)
+        {
+            Console.WriteLine($"AotAnywhere: importing the iOS SDKs from {xip} into {output} (this decompresses the whole archive and takes a few minutes)...");
+            XcodeImporter.ImportXip(xip, output, Console.WriteLine);
+        }
+        else
+        {
+            Console.WriteLine($"AotAnywhere: importing the iOS SDKs from {from} into {output}...");
+            XcodeImporter.ImportDirectory(from!, output, Console.WriteLine);
+        }
+        Console.WriteLine($"AotAnywhere: done in {sw.Elapsed:m\\:ss}.");
+        return 0;
+    }
+
+    // objc-shims --out <dir> (<assembly> | @<file listing assemblies>)...
+    static int ObjCShimsTool(List<string> args)
+    {
+        string? output = null;
+        var assemblies = new List<string>();
+        for (int i = 0; i < args.Count; i++)
+        {
+            if (args[i] == "--out")
+                output = NextArg(args, ref i, "--out");
+            else if (args[i].StartsWith('@'))
+                assemblies.AddRange(File.ReadAllLines(args[i][1..]).Where(l => l.Trim().Length > 0));
+            else
+                assemblies.Add(args[i]);
+        }
+        if (output is null || assemblies.Count == 0)
+            throw new AppleToolException("usage: objc-shims --out <dir> (<assembly> | @<file>)...");
+        var r = ObjCShims.Generate(assemblies, output);
+        Console.WriteLine($"AotAnywhere: Objective-C declarations for {r.Classes} classes, {r.Protocols} protocols and {r.Structs} structs written to {output}.");
+        return 0;
+    }
+
+    // Symbols are stripped at link time instead (Apple's strip rejects zig-linked
+    // binaries), so the post-link strip has nothing left to do.
+    static int Strip(List<string> args) => 0;
+
+    // dSYM bundles need Apple's dsymutil; off-Mac builds don't produce them (the
+    // Apple package sets NoDSymUtil=true). `--help` is the ILCompiler targets' probe.
+    static int DSymUtil(List<string> args)
+    {
+        if (args is ["--help"])
+            return Print("OVERVIEW: AotAnywhere dsymutil stand-in (no dSYM generation off-Mac)");
+        Console.Error.WriteLine("AotAnywhere: dSYM generation is not supported off-Mac; no .dSYM was produced.");
+        return 0;
+    }
+
+    static string DeveloperDir() =>
+        Environment.GetEnvironmentVariable("DEVELOPER_DIR") is { Length: > 0 } d
+            ? d
+            : throw new AppleToolException("AotAnywhere: DEVELOPER_DIR is not set, so the Xcode location is unknown.");
+
+    // The directory of generated PATH wrappers (one per tool name).
+    static string ToolsBin() =>
+        Environment.GetEnvironmentVariable("AOTANYWHERE_XCODE_BIN") is { Length: > 0 } b
+            ? b
+            : throw new AppleToolException("AotAnywhere: AOTANYWHERE_XCODE_BIN is not set.");
+
+    static string Zig() =>
+        Environment.GetEnvironmentVariable("AOTANYWHERE_ZIG") is { Length: > 0 } z
+            ? z
+            : throw new AppleToolException("AotAnywhere: AOTANYWHERE_ZIG is not set, so zig cannot be found.");
+
+    // "<sdks>/iPhoneOS26.5.sdk" -> "26.5"
+    static string SdkVersion(string sdkPath, string platform) =>
+        Path.GetFileNameWithoutExtension(sdkPath).Substring(platform.Length);
+
+    static string NextArg(List<string> args, ref int i, string flag) =>
+        i + 1 < args.Count ? args[++i] : throw new AppleToolException($"AotAnywhere: '{flag}' is missing its value.");
+
+    static int Print(string s)
+    {
+        Console.WriteLine(s);
+        return 0;
+    }
+
+    static int Exec(string fileName, IEnumerable<string> arguments)
+    {
+        var psi = new ProcessStartInfo(fileName) { UseShellExecute = false };
+        foreach (var a in arguments)
+            psi.ArgumentList.Add(a);
+        using var p = Process.Start(psi) ?? throw new AppleToolException($"AotAnywhere: failed to start '{fileName}'.");
+        p.WaitForExit();
+        return p.ExitCode;
+    }
+}

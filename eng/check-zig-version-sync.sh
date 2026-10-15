@@ -3,7 +3,7 @@
 # ZigVersion drift guard.
 #
 # src/ZigVersion.props is the single source of truth for the pinned Zig
-# toolchain version. The MSBuild files derive from it (Crosscompile.targets and
+# toolchain version. The MSBuild files derive from it (ZigResolve.targets and
 # AotAnywhere.nuproj <Import> it; Sdk/Sdk.props bakes it in at pack time), so
 # they cannot drift. Two pins live outside MSBuild and cannot import it:
 #
@@ -46,7 +46,7 @@ grep -qF "Zig $upstream_version" "$copilot" \
 
 # --- Guard against a literal creeping back into the MSBuild files ----------
 # These must derive from ZigVersion.props, never hardcode a version.
-for f in src/Crosscompile.targets src/AotAnywhere.nuproj src/Sdk/Sdk.props; do
+for f in src/ZigResolve.targets src/Crosscompile.targets src/AotAnywhere.nuproj src/Sdk/Sdk.props src/Apple/StuDev.AotAnywhere.Apple.nuproj src/Apple/Sdk/Sdk.props; do
   if grep -Eq "<ZigVersion[^>]*>[0-9]" "$f"; then
     fail "$f hardcodes a <ZigVersion> literal; it must derive from src/ZigVersion.props"
   fi

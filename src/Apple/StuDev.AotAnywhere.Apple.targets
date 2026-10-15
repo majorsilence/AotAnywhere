@@ -1,0 +1,170 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!-- Builds net*-ios apps without a Mac / without Xcode installed.
+
+       The workload launches every Xcode tool as a bare `xcrun <tool> ...` (or
+       `clang`, `codesign`, ...) resolved from PATH. This package puts a
+       directory of generated wrappers first on PATH - one per tool name, each
+       running AotAnywhere.AppleTools with its own name - and points the
+       workload at an imported Xcode folder (headers, .tbd stubs and platform
+       plists only; see AotAnywhereImportXcode). The workload keeps all of its
+       own logic; translation happens at the tool boundary (clang -> zig cc, C#
+       Mach-O tools).
+
+       Active for iOS targets on non-macOS hosts, and on macOS when
+       AotAnywhereAppleForce=true (to test the off-Mac path on a Mac). -->
+
+  <!-- Packed next to this file; a source build imports it from src/. -->
+  <Import Project="$(MSBuildThisFileDirectory)ZigResolve.targets" Condition="Exists('$(MSBuildThisFileDirectory)ZigResolve.targets')" />
+  <Import Project="$(MSBuildThisFileDirectory)../ZigResolve.targets" Condition="!Exists('$(MSBuildThisFileDirectory)ZigResolve.targets')" />
+
+  <PropertyGroup>
+    <_AotAnywhereAppleActive>false</_AotAnywhereAppleActive>
+    <_AotAnywhereAppleActive Condition="'$(TargetPlatformIdentifier)' == 'iOS' and (!$([MSBuild]::IsOSPlatform('OSX')) or '$(AotAnywhereAppleForce)' == 'true')">true</_AotAnywhereAppleActive>
+
+    <!-- Where AotAnywhereImportXcode puts the imported Xcode; overridable to use
+         any Xcode-shaped folder (including a real Xcode.app). -->
+    <AotAnywhereHome Condition="'$(AotAnywhereHome)' == ''">$([MSBuild]::EnsureTrailingSlash('$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))')).aotanywhere/</AotAnywhereHome>
+    <AotAnywhereXcodeDir Condition="'$(AotAnywhereXcodeDir)' == ''">$(AotAnywhereHome)xcode/Xcode.app</AotAnywhereXcodeDir>
+
+    <!-- The Xcode stand-in. Packed into build/tools/; a source/dev build falls
+         back to the tool project's output, like AotAnywhereTasksAssembly. -->
+    <AotAnywhereAppleToolsDir Condition="'$(AotAnywhereAppleToolsDir)' == ''">$(MSBuildThisFileDirectory)tools/</AotAnywhereAppleToolsDir>
+    <_AotAnywhereAppleToolsDevDir>$(MSBuildThisFileDirectory)tools/AotAnywhere.AppleTools/bin/Release/net8.0/</_AotAnywhereAppleToolsDevDir>
+    <AotAnywhereAppleToolsDir Condition="!Exists('$(AotAnywhereAppleToolsDir)AotAnywhere.AppleTools.dll') and Exists('$(_AotAnywhereAppleToolsDevDir)AotAnywhere.AppleTools.dll')">$(_AotAnywhereAppleToolsDevDir)</AotAnywhereAppleToolsDir>
+    <_AotAnywhereAppleDll>$(AotAnywhereAppleToolsDir)AotAnywhere.AppleTools.dll</_AotAnywhereAppleDll>
+    <!-- The SDK's own dotnet host (set by the CLI for MSBuild), so the tool runs on the SDK's runtime. -->
+    <_AotAnywhereDotnetHost>$(DOTNET_HOST_PATH)</_AotAnywhereDotnetHost>
+    <_AotAnywhereDotnetHost Condition="'$(_AotAnywhereDotnetHost)' == ''">dotnet</_AotAnywhereDotnetHost>
+  </PropertyGroup>
+
+  <!-- Process-wide environment for the workload's tool launches: the tasks start
+       tools in-process with Process.Start, so they inherit it. -->
+  <UsingTask TaskName="AotAnywhereSetEnvironment"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Variables ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <PrependToPath ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          foreach (var v in Variables)
+            Environment.SetEnvironmentVariable(v.ItemSpec, v.GetMetadata("Value"));
+          var path = Environment.GetEnvironmentVariable("PATH") ?? "";
+          if (!path.StartsWith(PrependToPath + Path.PathSeparator, StringComparison.Ordinal))
+            Environment.SetEnvironmentVariable("PATH", PrependToPath + Path.PathSeparator + path);
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Tool names the workload (and the ILCompiler targets' probes) launch. -->
+  <ItemGroup Condition="'$(_AotAnywhereAppleActive)' == 'true'">
+    <_AotAnywhereAppleTool Include="xcrun;clang;clang++;codesign;install_name_tool;strip;dsymutil;mdimport" />
+  </ItemGroup>
+
+  <Target Name="AotAnywhereAppleSetup"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true'"
+          BeforeTargets="PrepareForBuild;_DetectSdkLocations;SetupOSSpecificProps"
+          DependsOnTargets="SetPathToZig">
+
+    <Error Condition="!Exists('$(AotAnywhereAppleToolsDir)AotAnywhere.AppleTools.dll')"
+           Text="AotAnywhere: AotAnywhere.AppleTools.dll was not found in '$(AotAnywhereAppleToolsDir)'. For a source build, run `dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release` first." />
+    <Error Condition="!Exists('$(AotAnywhereXcodeDir)/Contents/version.plist')"
+           Text="AotAnywhere: no Xcode found at '$(AotAnywhereXcodeDir)'. Import one from an Xcode .xip you downloaded from Apple: dotnet msbuild -t:AotAnywhereImportXcode -p:XcodeXip=/path/to/Xcode.xip (or set AotAnywhereXcodeDir to an existing Xcode folder)." />
+    <Error Condition="'$(PublishAot)' != 'true' or '$(_IsPublishing)' != 'true'"
+           Text="AotAnywhere: building iOS apps without a Mac requires Native AOT: use `dotnet publish -r ios-arm64 -p:PublishAot=true` (for the simulator: `dotnet build -r iossimulator-arm64 -p:PublishAot=true -p:_IsPublishing=true`). The Mono runtime's iOS AOT compiler only exists for macOS hosts." />
+
+    <PropertyGroup>
+      <_AotAnywhereAppleBin>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'bin'))</_AotAnywhereAppleBin>
+      <_AotAnywhereAppleBin>$(_AotAnywhereAppleBin.TrimEnd('/').TrimEnd('\'))</_AotAnywhereAppleBin>
+
+      <!-- Point the workload at the imported Xcode instead of xcode-select. -->
+      <XcodeLocation>$(AotAnywhereXcodeDir)</XcodeLocation>
+      <!-- Codesign launches $(CodesignPath)/codesign rather than going through xcrun. -->
+      <CodesignPath>$(_AotAnywhereAppleBin)</CodesignPath>
+      <!-- dSYM bundles need Apple's dsymutil. -->
+      <NoDSymUtil>true</NoDSymUtil>
+    </PropertyGroup>
+
+    <!-- One wrapper per tool name. -->
+    <WriteLinesToFile Condition="!$([MSBuild]::IsOSPlatform('Windows'))"
+                      File="$(_AotAnywhereAppleBin)/%(_AotAnywhereAppleTool.Identity)"
+                      Lines="#!/bin/sh;exec &quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; %(_AotAnywhereAppleTool.Identity) &quot;$@&quot;"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <Exec Condition="!$([MSBuild]::IsOSPlatform('Windows'))"
+          Command="chmod +x @(_AotAnywhereAppleTool->'&quot;$(_AotAnywhereAppleBin)/%(Identity)&quot;', ' ')"
+          StandardOutputImportance="Low" />
+
+    <ItemGroup>
+      <_AotAnywhereAppleEnv Include="AOTANYWHERE_ZIG" Value="$(_AotAnywhereZigExe)" />
+      <_AotAnywhereAppleEnv Include="AOTANYWHERE_XCODE_BIN" Value="$(_AotAnywhereAppleBin)" />
+      <!-- The workload passes DEVELOPER_DIR to the tools it launches, but the
+           ILCompiler targets' own xcrun SDK-path probe doesn't; set it
+           process-wide, the way xcode-select would. -->
+      <_AotAnywhereAppleEnv Include="DEVELOPER_DIR" Value="$(AotAnywhereXcodeDir)/Contents/Developer" />
+    </ItemGroup>
+    <AotAnywhereSetEnvironment Variables="@(_AotAnywhereAppleEnv)" PrependToPath="$(_AotAnywhereAppleBin)" />
+
+  </Target>
+
+  <!-- AotAnywhereAppleGeneratedHeaders=true: compile the workload's generated native code
+       (main.mm, registrar.mm) against Objective-C declarations generated from the binding
+       assemblies' metadata ([Register], [Protocol], struct layouts) instead of the SDK's
+       headers. Only the platform assembly: the registrar declares the types of other binding
+       assemblies itself, as no SDK header has them. And the runtime pack's copy of it, since
+       the reference assembly has no private struct fields, so no layouts. -->
+  <Target Name="_AotAnywhereAppleObjCShims"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and '$(AotAnywhereAppleGeneratedHeaders)' == 'true'"
+          BeforeTargets="_CompileNativeExecutable;_CompilePostTrimmingFiles"
+          DependsOnTargets="AotAnywhereAppleSetup">
+
+    <PropertyGroup>
+      <_AotAnywhereObjCShimDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'aotanywhere-objc'))</_AotAnywhereObjCShimDir>
+      <_AotAnywhereObjCShimDir>$(_AotAnywhereObjCShimDir.TrimEnd('/').TrimEnd('\'))</_AotAnywhereObjCShimDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_AotAnywhereObjCShimInput Include="@(RuntimePackAsset)" Condition="'%(Filename)%(Extension)' == 'Microsoft.iOS.dll'" />
+    </ItemGroup>
+
+    <Error Condition="'@(_AotAnywhereObjCShimInput)' == ''" Text="AotAnywhere: the runtime pack's Microsoft.iOS.dll was not found among the RuntimePackAsset items." />
+    <WriteLinesToFile File="$(_AotAnywhereObjCShimDir).rsp"
+                      Lines="@(_AotAnywhereObjCShimInput->'%(FullPath)')"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <Exec Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; objc-shims --out &quot;$(_AotAnywhereObjCShimDir)&quot; &quot;@$(_AotAnywhereObjCShimDir).rsp&quot;"
+          StandardOutputImportance="Low" />
+
+    <ItemGroup>
+      <_AotAnywhereAppleShimEnv Include="AOTANYWHERE_OBJC_SHIMS" Value="$(_AotAnywhereObjCShimDir)" />
+    </ItemGroup>
+    <AotAnywhereSetEnvironment Variables="@(_AotAnywhereAppleShimEnv)" PrependToPath="$(_AotAnywhereAppleBin)" />
+  </Target>
+
+  <!-- One-time setup: extract what iOS builds need from an Xcode .xip downloaded from
+       Apple (https://developer.apple.com/download/all/?q=Xcode - Apple ID required, so it
+       cannot be fetched automatically), or from an installed Xcode.app:
+
+         dotnet msbuild -t:AotAnywhereImportXcode -p:XcodeXip=/path/to/Xcode_27.xip
+         dotnet msbuild -t:AotAnywhereImportXcode -p:XcodeApp=/Applications/Xcode.app
+
+       The result (a few hundred MB: SDK headers, .tbd stubs, version plists) lands in
+       $(AotAnywhereXcodeDir), where builds pick it up. -->
+  <Target Name="AotAnywhereImportXcode">
+    <Error Condition="('$(XcodeXip)' == '') == ('$(XcodeApp)' == '')"
+           Text="AotAnywhere: pass exactly one of XcodeXip (an Xcode .xip downloaded from https://developer.apple.com/download/all/?q=Xcode) or XcodeApp (an installed Xcode.app)." />
+    <Error Condition="!Exists('$(_AotAnywhereAppleDll)')"
+           Text="AotAnywhere: AotAnywhere.AppleTools.dll was not found in '$(AotAnywhereAppleToolsDir)'. For a source build, run `dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release` first." />
+    <Exec Condition="'$(XcodeXip)' != ''"
+          Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; import-xcode --xip &quot;$(XcodeXip)&quot; --out &quot;$(AotAnywhereXcodeDir)&quot;" />
+    <Exec Condition="'$(XcodeApp)' != ''"
+          Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; import-xcode --from &quot;$(XcodeApp)&quot; --out &quot;$(AotAnywhereXcodeDir)&quot;" />
+  </Target>
+
+</Project>

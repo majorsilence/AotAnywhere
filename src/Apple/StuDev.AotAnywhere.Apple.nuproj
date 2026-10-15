@@ -1,0 +1,120 @@
+<Project Sdk="Microsoft.Build.NoTargets">
+
+  <!-- The single ZigVersion pin, shared with StuDev.AotAnywhere and baked into Sdk.props at pack time. -->
+  <Import Project="../ZigVersion.props" />
+
+  <PropertyGroup>
+
+    <TargetFramework>netstandard2.0</TargetFramework>
+
+    <PackageId>StuDev.AotAnywhere.Apple</PackageId>
+    <Version Condition="'$(Version)' == ''">42.42.42-dev</Version>
+    <Authors>Stuart Lang</Authors>
+    <Company>Stuart Lang</Company>
+    <Description>Build net*-ios Native AOT apps on Windows, Linux and macOS without Xcode. Replaces the Xcode tools the iOS workload calls with open-source C# implementations and Zig, using the iOS SDK imported from an Xcode .xip you download from Apple.</Description>
+    <PackageProjectUrl>https://github.com/slang25/AotAnywhere</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Zig comes in through Sdk.props; the package itself has no dependencies to express. -->
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+
+    <!-- build/ZigVersion.props is imported explicitly by ZigResolve.targets, not through
+         NuGet's build/<id>.props convention; the auto-import entry point is the .targets. -->
+    <NoWarn>$(NoWarn);NU5129</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="StuDev.AotAnywhere.Apple.targets">
+      <Pack>true</Pack>
+      <PackagePath>build</PackagePath>
+    </None>
+    <!-- Shared with StuDev.AotAnywhere: one source file packed into both packages. -->
+    <None Include="../ZigResolve.targets">
+      <Pack>true</Pack>
+      <PackagePath>build</PackagePath>
+    </None>
+    <None Include="../ZigVersion.props">
+      <Pack>true</Pack>
+      <PackagePath>build</PackagePath>
+    </None>
+    <None Include="Sdk/Sdk.targets">
+      <Pack>true</Pack>
+      <PackagePath>Sdk</PackagePath>
+    </None>
+    <None Include="../../README.md">
+      <Pack>true</Pack>
+      <PackagePath>/</PackagePath>
+    </None>
+  </ItemGroup>
+
+  <!-- Same as StuDev.AotAnywhere's: Sdk.props carries the package and Zig versions. -->
+  <UsingTask TaskName="ReplaceInFile"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Source ParameterType="System.String" Required="true" />
+      <Destination ParameterType="System.String" Required="true" />
+      <Find ParameterType="System.String" Required="true" />
+      <ReplaceWith ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          Directory.CreateDirectory(Path.GetDirectoryName(Destination));
+          File.WriteAllText(Destination, File.ReadAllText(Source).Replace(Find, ReplaceWith));
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="BakeSdkProps" BeforeTargets="_GetPackageFiles">
+    <PropertyGroup>
+      <_BakedSdkProps>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'Sdk.props'))</_BakedSdkProps>
+    </PropertyGroup>
+
+    <ReplaceInFile Source="$(MSBuildProjectDirectory)/Sdk/Sdk.props"
+                   Destination="$(_BakedSdkProps)"
+                   Find="__AOTANYWHERE_PACKAGE_VERSION__"
+                   ReplaceWith="$(Version)" />
+    <ReplaceInFile Source="$(_BakedSdkProps)"
+                   Destination="$(_BakedSdkProps)"
+                   Find="__AOTANYWHERE_ZIG_VERSION__"
+                   ReplaceWith="$(ZigVersion)" />
+
+    <ItemGroup>
+      <None Include="$(_BakedSdkProps)">
+        <Pack>true</Pack>
+        <PackagePath>Sdk</PackagePath>
+      </None>
+    </ItemGroup>
+  </Target>
+
+  <!-- Publish the Xcode stand-in (framework-dependent, portable: one copy runs on every build
+       host through the SDK's dotnet) and pack it into build/tools/, where the targets'
+       $(AotAnywhereAppleToolsDir) default resolves it. A separate `dotnet publish` process for
+       the same reason the core package builds its task assembly with `dotnet build`. -->
+  <Target Name="PublishAppleTools">
+    <PropertyGroup>
+      <_AppleToolsPublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'apple-tools'))</_AppleToolsPublishDir>
+    </PropertyGroup>
+    <RemoveDir Directories="$(_AppleToolsPublishDir)" />
+    <Exec Command="dotnet publish &quot;$(MSBuildThisFileDirectory)tools/AotAnywhere.AppleTools/AotAnywhere.AppleTools.csproj&quot; -c Release -o &quot;$(_AppleToolsPublishDir.TrimEnd('\').TrimEnd('/'))&quot;" />
+    <ItemGroup>
+      <_AppleToolsFile Include="$(_AppleToolsPublishDir)**/*" Exclude="$(_AppleToolsPublishDir)**/*.pdb" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="IncludeAppleToolsInPackage"
+          DependsOnTargets="PublishAppleTools"
+          BeforeTargets="_GetPackageFiles">
+    <ItemGroup>
+      <None Include="@(_AppleToolsFile)">
+        <Pack>true</Pack>
+        <!-- NuGet appends each file's %(RecursiveDir) itself. -->
+        <PackagePath>build/tools/</PackagePath>
+      </None>
+    </ItemGroup>
+  </Target>
+</Project>

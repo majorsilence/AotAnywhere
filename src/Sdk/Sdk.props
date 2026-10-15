@@ -32,6 +32,9 @@
     <!-- Tells Crosscompile.targets its own (restore-invisible) Zig reference is
          superseded by the restore-visible one below. -->
     <_AotAnywhereZigRefViaSdk>true</_AotAnywhereZigRefViaSdk>
+
+    <_AotAnywhereNeedsZig>false</_AotAnywhereNeedsZig>
+    <_AotAnywhereNeedsZig Condition="'$(UseExternalZig)' != 'true' and '$(HostRuntimeIdentifier)' != '' and ($(RuntimeIdentifier.Contains('linux')) or $(RuntimeIdentifier.Contains('osx')) or ($(RuntimeIdentifier.StartsWith('win')) and !$([MSBuild]::IsOSPlatform('Windows'))))">true</_AotAnywhereNeedsZig>
   </PropertyGroup>
 
   <ItemGroup>
@@ -43,13 +46,15 @@
     <!-- Zig for the build host. Only referenced when this build would actually
          cross-link — the same condition as the Crosscompile.targets import in
          StuDev.AotAnywhere.targets (keep in sync) — so RID-less restores and
-         plain builds don't download a ~50 MB toolchain they won't use. -->
+         plain builds don't download a ~50 MB toolchain they won't use. Skipped
+         if StuDev.AotAnywhere.Apple's Sdk.props already added it (both SDKs
+         referenced): items, unlike properties, evaluate in order. -->
     <PackageReference Include="Vezel.Zig.Toolsets.$(HostRuntimeIdentifier)"
       Version="$(ZigVersion)"
       PrivateAssets="all"
       IsImplicitlyDefined="true"
       GeneratePathProperty="true"
-      Condition="'$(UseExternalZig)' != 'true' and '$(HostRuntimeIdentifier)' != '' and ($(RuntimeIdentifier.Contains('linux')) or $(RuntimeIdentifier.Contains('osx')) or ($(RuntimeIdentifier.StartsWith('win')) and !$([MSBuild]::IsOSPlatform('Windows'))))" />
+      Condition="'$(_AotAnywhereNeedsZig)' == 'true' and '@(PackageReference->WithMetadataValue('Identity', 'Vezel.Zig.Toolsets.$(HostRuntimeIdentifier)'))' == ''" />
   </ItemGroup>
 
 </Project>

@@ -54,7 +54,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.nuget/packages
-          key: nuget-ci-${{ runner.os }}-${{ hashFiles('src/AotAnywhere.nuproj', 'src/Crosscompile.targets', 'test/Hello.csproj') }}
+          key: nuget-ci-${{ runner.os }}-${{ hashFiles('src/AotAnywhere.nuproj', 'src/Crosscompile.targets', 'src/ZigResolve.targets', 'test/Hello.csproj') }}
           restore-keys: |
             nuget-ci-${{ runner.os }}-
       # For the AotAnywhereUpxCompress publish below. Pinned release download:

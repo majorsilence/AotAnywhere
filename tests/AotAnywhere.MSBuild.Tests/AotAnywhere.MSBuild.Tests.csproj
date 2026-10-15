@@ -15,6 +15,14 @@
     <!-- The managed core of the Windows link task (pure translator + COFF
          renamer), exercised by WindowsTranslatorTests / CoffRenamerTests. -->
     <ProjectReference Include="../../src/tasks/AotAnywhere.Tasks/AotAnywhere.Tasks.csproj" />
+    <!-- The Xcode stand-in for off-Mac iOS builds (clang -> zig translation, Mach-O
+         tools), exercised by ClangToZigTests / AppleSdkTests / MachoInstallNameTests. -->
+    <ProjectReference Include="../../src/Apple/tools/AotAnywhere.AppleTools/AotAnywhere.AppleTools.csproj" />
+  </ItemGroup>
+
+  <!-- Synthetic .xip / .xz archives (fixtures/xip/make-fixtures.py) for the Xcode importer tests. -->
+  <ItemGroup>
+    <None Include="fixtures/**" Exclude="fixtures/**/*.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
