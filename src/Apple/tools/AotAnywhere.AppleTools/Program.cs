@@ -28,14 +28,25 @@ static class Tools
         "dsymutil" => DSymUtil(args),
         "import-xcode" => ImportXcode(args),
         "objc-shims" => ObjCShimsTool(args),
+        "synthetic-xcode" => SyntheticXcodeTool(args),
         // Spotlight indexing of the build output; meaningless off-Mac.
         "mdimport" => 0,
         // On a Mac with Xcode (AotAnywhereAppleForce), defer anything not reimplemented here.
-        _ when OperatingSystem.IsMacOS() && File.Exists(AppleXcrun) => Exec(AppleXcrun, [tool, .. args]),
+        _ when OperatingSystem.IsMacOS() && File.Exists(AppleXcrun) => Exec(AppleXcrun, [tool, .. args], AppleToolEnvironment()),
         _ => throw new AppleToolException($"AotAnywhere: the Xcode tool '{tool}' is not available off-Mac. If the project uses a feature that needs it (storyboards, asset catalogs, Metal shaders, Core ML models, ...), it can only be built on a Mac with Xcode."),
     };
 
     const string AppleXcrun = "/usr/bin/xcrun";
+
+    // Apple's tools need the real Xcode: when DEVELOPER_DIR points at a synthetic one, unset it
+    // so xcrun falls back to xcode-select's choice.
+    static Dictionary<string, string?>? AppleToolEnvironment()
+    {
+        string? dev = Environment.GetEnvironmentVariable("DEVELOPER_DIR");
+        if (dev is null || !File.Exists(Path.Combine(dev, "..", "..", SyntheticXcode.Marker)))
+            return null;
+        return new() { ["DEVELOPER_DIR"] = null };
+    }
 
     // xcrun [-sdk|--sdk <sdk>] (--show-sdk-path | --show-sdk-version | --show-sdk-platform-path | -f <tool> | <tool> args...)
     static int Xcrun(List<string> args)
@@ -113,7 +124,8 @@ static class Tools
             linkSysroot = Directory.CreateTempSubdirectory("aotanywhere-stubs-").FullName;
             inv = inv with
             {
-                Args = StubLink.Prepare(inv.Args, stubs.Sysroot, linkSysroot, autolinkStart, referenced, weakOnly),
+                Args = StubLink.Prepare(inv.Args, stubs.Sysroot, linkSysroot, autolinkStart, referenced, weakOnly, flatObjCClasses: true),
+                FlatObjCClasses = true,
                 ZigLibc = ClangToZig.ZigLibcFile(stubs with { Sysroot = linkSysroot }),
             };
         }
@@ -193,14 +205,30 @@ static class Tools
                     return rc;
                 linkArgs.Add(obj);
             }
-            Dictionary<string, string>? env = null;
+            Dictionary<string, string?>? env = null;
             if (inv.ZigLibc is not null)
             {
                 string libc = Path.Combine(dir, "libc.txt");
                 File.WriteAllText(libc, inv.ZigLibc);
                 env = new() { ["ZIG_LIBC"] = libc };
             }
-            return Exec(Zig(), [inv.Driver, .. linkArgs], env);
+            if (!inv.FlatObjCClasses)
+                return Exec(Zig(), [inv.Driver, .. linkArgs], env);
+
+            // Stub links leave Objective-C classes undefined for dyld's flat lookup. zig can only
+            // allow that for all undefined symbols at once (no -U), so link normally first and
+            // retry with -undefined dynamic_lookup only if classes are all that is missing - any
+            // other undefined symbol still fails the link.
+            var errors = new System.Text.StringBuilder();
+            int first = Exec(Zig(), [inv.Driver, .. linkArgs], env, errors);
+            if (first == 0)
+                return 0;
+            if (!ClangToZig.OnlyObjCClassesUndefined(errors.ToString()))
+            {
+                Console.Error.Write(errors);
+                return first;
+            }
+            return Exec(Zig(), [inv.Driver, .. linkArgs, "-Wl,-undefined,dynamic_lookup"], env);
         }
         finally
         {
@@ -326,6 +354,26 @@ static class Tools
         return 0;
     }
 
+    // synthetic-xcode --out <Xcode.app> --xcode-version <x.y> --sdk-version <x.y>
+    static int SyntheticXcodeTool(List<string> args)
+    {
+        string? output = null, xcode = null, sdk = null;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--out": output = NextArg(args, ref i, "--out"); break;
+                case "--xcode-version": xcode = NextArg(args, ref i, "--xcode-version"); break;
+                case "--sdk-version": sdk = NextArg(args, ref i, "--sdk-version"); break;
+                default: throw new AppleToolException($"AotAnywhere: unknown synthetic-xcode option '{args[i]}'.");
+            }
+        }
+        if (output is null || xcode is null || sdk is null)
+            throw new AppleToolException("usage: synthetic-xcode --out <Xcode.app> --xcode-version <x.y> --sdk-version <x.y>");
+        SyntheticXcode.Write(output, xcode, sdk);
+        return 0;
+    }
+
     // objc-shims --out <dir> (<assembly> | @<file listing assemblies>)...
     static int ObjCShimsTool(List<string> args)
     {
@@ -393,16 +441,23 @@ static class Tools
     // AOTANYWHERE_APPLE_DEBUG=1: log the commands run and keep per-link temporary files.
     static readonly bool Debug = Environment.GetEnvironmentVariable("AOTANYWHERE_APPLE_DEBUG") is "1" or "true";
 
-    static int Exec(string fileName, IEnumerable<string> arguments, Dictionary<string, string>? environment = null)
+    static int Exec(string fileName, IEnumerable<string> arguments, IReadOnlyDictionary<string, string?>? environment = null, System.Text.StringBuilder? stderr = null)
     {
         if (Debug)
-            Console.Error.WriteLine("AotAnywhere: " + string.Join(' ', (environment ?? []).Select(e => $"{e.Key}={e.Value}").Append(fileName).Concat(arguments).Select(a => a.Contains(' ') ? $"'{a}'" : a)));
-        var psi = new ProcessStartInfo(fileName) { UseShellExecute = false };
+            Console.Error.WriteLine("AotAnywhere: " + string.Join(' ', (environment ?? new Dictionary<string, string?>()).Select(e => $"{e.Key}={e.Value}").Append(fileName).Concat(arguments).Select(a => a.Contains(' ') ? $"'{a}'" : a)));
+        var psi = new ProcessStartInfo(fileName) { UseShellExecute = false, RedirectStandardError = stderr is not null };
         foreach (var a in arguments)
             psi.ArgumentList.Add(a);
-        foreach (var (k, v) in environment ?? [])
-            psi.Environment[k] = v;
+        foreach (var (k, v) in environment ?? new Dictionary<string, string?>())
+        {
+            if (v is null)
+                psi.Environment.Remove(k);
+            else
+                psi.Environment[k] = v;
+        }
         using var p = Process.Start(psi) ?? throw new AppleToolException($"AotAnywhere: failed to start '{fileName}'.");
+        if (stderr is not null)
+            stderr.Append(p.StandardError.ReadToEnd());
         p.WaitForExit();
         return p.ExitCode;
     }

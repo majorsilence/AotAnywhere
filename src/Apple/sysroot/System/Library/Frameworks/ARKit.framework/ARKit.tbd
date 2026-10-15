@@ -2,6 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/ARKit.framework/ARKit'
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _ARBlendShapeLocationBrowDownLeft, _ARBlendShapeLocationBrowDownRight,
@@ -50,9 +51,9 @@ exports:
                         ARMeshAnchor, ARMeshGeometry, ARObjectAnchor, ARObjectScanningConfiguration,
                         AROrientationTrackingConfiguration, ARParticipantAnchor, ARPlaneAnchor,
                         ARPlaneExtent, ARPlaneGeometry, ARPointCloud,
-                        ARPositionalTrackingConfiguration, ARRaycastQuery, ARRaycastResult,
-                        ARReferenceImage, ARReferenceObject, ARSCNFaceGeometry, ARSCNPlaneGeometry,
-                        ARSCNView, ARSKView, ARSession, ARSkeleton, ARSkeleton2D, ARSkeleton3D,
-                        ARSkeletonDefinition, ARTrackedRaycast, ARVideoFormat, ARWorldMap,
-                        ARWorldTrackingConfiguration ]
+                        ARPositionalTrackingConfiguration, ARQuickLookPreviewItem, ARRaycastQuery,
+                        ARRaycastResult, ARReferenceImage, ARReferenceObject, ARSCNFaceGeometry,
+                        ARSCNPlaneGeometry, ARSCNView, ARSKView, ARSession, ARSkeleton,
+                        ARSkeleton2D, ARSkeleton3D, ARSkeletonDefinition, ARTrackedRaycast,
+                        ARVideoFormat, ARWorldMap, ARWorldTrackingConfiguration ]
 ...

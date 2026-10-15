@@ -2,15 +2,14 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/usr/lib/swift/libswiftCore.dylib'
-current-version: 0
-compatibility-version: 0
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    symbols:          [ '$ld$previous$@rpath/libswiftCore.dylib$$2$7.0$12.2$$',
-                        '$ld$previous$@rpath/libswiftCore.dylib$$7$7.0$12.2$$', '_$s8RawValueSYTl',
-                        '_$sBOWV', '_$sBi64_WV', '_$sSH13_rawHashValue4seedS2i_tFTq',
-                        '_$sSH4hash4intoys6HasherVz_tFTq', '_$sSH9hashValueSivgTq', '_$sSHMp',
-                        '_$sSHSQTb', '_$sSQ2eeoiySbx_xtFZTq', '_$sSQMp', '_$sSRMa',
+    symbols:          [ '_$s8RawValueSYTl', '_$sBOWV', '_$sBi64_WV',
+                        '_$sSH13_rawHashValue4seedS2i_tFTq', '_$sSH4hash4intoys6HasherVz_tFTq',
+                        '_$sSH9hashValueSivgTq', '_$sSHMp', '_$sSHSQTb', '_$sSQ2eeoiySbx_xtFZTq',
+                        '_$sSQMp', '_$sSRMa', '_$sSRyxG10Foundation12DataProtocolABs5UInt8VRszlMc',
+                        '_$sSRyxG10Foundation15ContiguousBytesABs5UInt8VRszlMc',
                         '_$sSY8rawValue03RawB0QzvgTq', '_$sSY8rawValuexSg03RawB0Qz_tcfCTq',
                         '_$sSYMp', '_$sSqMa', '_$ss5ErrorMp', '_$ss5UInt8VMn', '_$ss5UInt8VN',
                         '_$ss6HasherV5_seedABSi_tcfC', '_$ss6HasherV8_combineyySuF',

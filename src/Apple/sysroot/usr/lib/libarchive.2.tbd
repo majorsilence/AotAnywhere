@@ -1,7 +1,0 @@
---- !tapi-tbd
-tbd-version:     4
-targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-install-name:    '/usr/lib/libarchive.2.dylib'
-current-version: 9.2.0
-compatibility-version: 9
-...

@@ -80,6 +80,66 @@ public static class BindingSymbols
     }
 
     /// <summary>
+    /// The framework install paths the bindings declare in <c>ObjCRuntime.Constants</c>
+    /// (<c>UIKitLibrary = "/System/Library/Frameworks/UIKit.framework/UIKit"</c>, ...).
+    /// </summary>
+    public static HashSet<string> FrameworkConstants(string assemblyPath)
+    {
+        using var pe = new PEReader(File.OpenRead(assemblyPath));
+        var md = pe.GetMetadataReader();
+        var result = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var h in md.TypeDefinitions)
+        {
+            var td = md.GetTypeDefinition(h);
+            if (md.GetString(td.Name) != "Constants" || md.GetString(td.Namespace) != "ObjCRuntime")
+                continue;
+            foreach (var fh in td.GetFields())
+            {
+                var f = md.GetFieldDefinition(fh);
+                if (f.GetDefaultValue().IsNil)
+                    continue;
+                var c = md.GetConstant(f.GetDefaultValue());
+                if (c.TypeCode != ConstantTypeCode.String)
+                    continue;
+                var r = md.GetBlobReader(c.Value);
+                string value = r.ReadUTF16(r.Length);
+                if (value.StartsWith("/System/Library/Frameworks/", StringComparison.Ordinal))
+                    result.Add(value);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Each binding namespace's framework, as its own P/Invokes name it most often - the
+    /// namespace isn't always the framework (AudioUnit's functions are in AudioToolbox).
+    /// </summary>
+    public static Dictionary<string, string> NamespaceLibraries(string assemblyPath)
+    {
+        using var pe = new PEReader(File.OpenRead(assemblyPath));
+        var md = pe.GetMetadataReader();
+        var counts = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
+        foreach (var h in md.TypeDefinitions)
+        {
+            var td = md.GetTypeDefinition(h);
+            string ns = NamespaceOf(md, td);
+            foreach (var mh in td.GetMethods())
+            {
+                var import = md.GetMethodDefinition(mh).GetImport();
+                if (import.Module.IsNil)
+                    continue;
+                string lib = md.GetString(md.GetModuleReference(import.Module).Name);
+                if (!lib.StartsWith("/System/Library/Frameworks/", StringComparison.Ordinal))
+                    continue;
+                if (!counts.TryGetValue(ns, out var c))
+                    counts[ns] = c = new(StringComparer.Ordinal);
+                c[lib] = c.GetValueOrDefault(lib) + 1;
+            }
+        }
+        return counts.ToDictionary(k => k.Key, k => k.Value.OrderByDescending(v => v.Value).ThenBy(v => v.Key, StringComparer.Ordinal).First().Key, StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// The install path a binding's library name refers to: paths as given, framework names
     /// (<c>[Field("X", "UIKit")]</c>) as the framework binary, and null for the app itself
     /// (<c>__Internal</c>) or names that aren't Apple libraries.

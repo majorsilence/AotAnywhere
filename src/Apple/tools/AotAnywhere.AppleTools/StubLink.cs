@@ -85,8 +85,13 @@ public static class StubLink
     /// <param name="autolinkStart">Index in <paramref name="zigArgs"/> where the autolinked libraries begin.</param>
     /// <param name="referenced">The symbols the link's objects import; autolinked libraries supplying none are dropped.</param>
     /// <param name="weakOnly">Symbols only referenced weakly; a library binding nothing else is linked weakly (LC_LOAD_WEAK_DYLIB), as ld64 does.</param>
+    /// <param name="flatObjCClasses">
+    /// Leave Objective-C class symbols (other than libobjc's NSObject) out of the per-link stubs, so
+    /// they remain undefined for dyld's flat lookup: the sysroot only records the framework a class's
+    /// binding namespace names, which decides that the framework is linked, not where the class is.
+    /// </param>
     public static List<string> Prepare(IReadOnlyList<string> zigArgs, string sysroot, string linkSysroot,
-        int autolinkStart = int.MaxValue, IReadOnlySet<string>? referenced = null, IReadOnlySet<string>? weakOnly = null)
+        int autolinkStart = int.MaxValue, IReadOnlySet<string>? referenced = null, IReadOnlySet<string>? weakOnly = null, bool flatObjCClasses = false)
     {
         sysroot = Path.GetFullPath(sysroot).TrimEnd('/', '\\');
         string linkRoot = linkSysroot.TrimEnd('/', '\\');
@@ -171,7 +176,9 @@ public static class StubLink
             .Where(e => referenced is not null && !e.Chosen.Keys.Any(referenced.Contains)));
         foreach (var e in entries.Concat(synthetic).Where(e => !drop.Contains(e)))
         {
-            var symbols = e.Chosen.GroupBy(c => c.Value, c => c.Key).ToDictionary(g => g.Key, g => (IReadOnlyCollection<string>)g.ToList(), StringComparer.Ordinal);
+            // Objective-C classes stay undefined, for dyld's flat lookup (see FlatObjCClasses).
+            var symbols = e.Chosen.Where(c => !flatObjCClasses || !IsFlatClass(c.Key, e.InstallName))
+                .GroupBy(c => c.Value, c => c.Key).ToDictionary(g => g.Key, g => (IReadOnlyCollection<string>)g.ToList(), StringComparer.Ordinal);
             string text = Tbd.Write(e.InstallName, Targets, symbols, e.CurrentVersion, e.CompatibilityVersion);
             foreach (var rel in e.Rels)
             {
@@ -217,6 +224,10 @@ public static class StubLink
         result.AddRange(synthetic.Where(e => !drop.Contains(e)).Select(e => Path.Combine(linkRoot, e.Rels[0])));
         return result;
     }
+
+    static bool IsFlatClass(string symbol, string installName) =>
+        (symbol.StartsWith("_OBJC_CLASS_$_", StringComparison.Ordinal) || symbol.StartsWith("_OBJC_METACLASS_$_", StringComparison.Ordinal))
+        && installName != "/usr/lib/libobjc.A.dylib";
 
     static Entry Load(string rel, TbdLibrary lib, Version minOS, int platform, bool autolinked)
     {

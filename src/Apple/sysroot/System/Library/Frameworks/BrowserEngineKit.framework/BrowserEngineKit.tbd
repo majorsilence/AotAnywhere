@@ -2,6 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/BrowserEngineKit.framework/BrowserEngineKit'
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _BEAccessibilitySelectionChangedNotification, _BEAccessibilityTraitMenuItem,
@@ -19,7 +20,4 @@ exports:
                         BETextAlternatives, BETextDocumentContext, BETextDocumentRequest,
                         BETextInteraction, BETextSuggestion, BEWebAppManifest, BEWebContentFilter,
                         BEWebContentProcess ]
-reexports:
-  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    objc-classes:     [ BEAudioSession ]
 ...

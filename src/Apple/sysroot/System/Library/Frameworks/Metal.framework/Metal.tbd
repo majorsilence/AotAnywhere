@@ -2,13 +2,12 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/Metal.framework/Metal'
-current-version: 382.5.3
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _MTL4CommandQueueErrorDomain, _MTLBinaryArchiveDomain,
                         _MTLCaptureErrorDomain, _MTLCommandBufferEncoderInfoErrorKey,
-                        _MTLCommandBufferErrorDomain, _MTLCommonCounterClipperInvocations,
-                        _MTLCommonCounterClipperPrimitivesOut,
+                        _MTLCommonCounterClipperInvocations, _MTLCommonCounterClipperPrimitivesOut,
                         _MTLCommonCounterComputeKernelInvocations, _MTLCommonCounterFragmentCycles,
                         _MTLCommonCounterFragmentInvocations, _MTLCommonCounterFragmentsPassed,
                         _MTLCommonCounterPostTessellationVertexCycles,

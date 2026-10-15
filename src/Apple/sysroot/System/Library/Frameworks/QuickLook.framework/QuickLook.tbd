@@ -2,11 +2,10 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/QuickLook.framework/QuickLook'
-current-version: 1034
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    objc-classes:     [ ARQuickLookPreviewItem, QLFilePreviewRequest, QLFileThumbnailRequest,
-                        QLPreviewController, QLPreviewProvider, QLPreviewReply,
-                        QLPreviewReplyAttachment, QLPreviewSceneActivationConfiguration,
-                        QLPreviewSceneOptions, QLThumbnailProvider, QLThumbnailReply ]
+    objc-classes:     [ QLFilePreviewRequest, QLPreviewController, QLPreviewProvider,
+                        QLPreviewReply, QLPreviewReplyAttachment,
+                        QLPreviewSceneActivationConfiguration, QLPreviewSceneOptions ]
 ...

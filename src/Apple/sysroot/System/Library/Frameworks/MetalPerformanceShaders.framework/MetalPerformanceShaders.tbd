@@ -2,7 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/MetalPerformanceShaders.framework/MetalPerformanceShaders'
-current-version: 130.0.19
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _MPSGetImageType, _MPSGetPreferredDevice,
@@ -10,7 +10,8 @@ exports:
                         _MPSImageBatchIterate, _MPSImageBatchResourceSize,
                         _MPSImageBatchSynchronize, _MPSRectNoClip, _MPSSetHeapCacheDuration,
                         _MPSStateBatchIncrementReadCount, _MPSStateBatchResourceSize,
-                        _MPSStateBatchSynchronize, _MPSSupportsMTLDevice ]
+                        _MPSStateBatchSynchronize, _MPSSupportsMTLDevice,
+                        _MTLCommandBufferErrorDomain ]
     objc-classes:     [ MPSAccelerationStructure, MPSAccelerationStructureGroup,
                         MPSBinaryImageKernel, MPSCNNAdd, MPSCNNAddGradient, MPSCNNArithmetic,
                         MPSCNNArithmeticGradient, MPSCNNArithmeticGradientState,

@@ -2,7 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/CoreImage.framework/CoreImage'
-current-version: 7
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _CIDetectorAccuracy, _CIDetectorAccuracyHigh, _CIDetectorAccuracyLow,
@@ -118,8 +118,8 @@ exports:
                         _kCIUISetIntermediate ]
     objc-classes:     [ CIAztecCodeDescriptor, CIBarcodeDescriptor, CIBlendKernel, CIColor,
                         CIColorKernel, CIContext, CIDataMatrixCodeDescriptor, CIDetector,
-                        CIFaceFeature, CIFeature, CIFilter, CIFilterShape, CIImage,
-                        CIImageAccumulator, CIImageProcessorKernel, CIKernel,
+                        CIFaceFeature, CIFeature, CIFilter, CIFilterGenerator, CIFilterShape,
+                        CIImage, CIImageAccumulator, CIImageProcessorKernel, CIKernel,
                         CIPDF417CodeDescriptor, CIQRCodeDescriptor, CIQRCodeFeature, CIRAWFilter,
                         CIRectangleFeature, CIRenderDestination, CIRenderInfo, CIRenderTask,
                         CISampler, CITextFeature, CIVector, CIWarpKernel ]

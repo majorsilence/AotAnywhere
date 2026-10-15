@@ -2,6 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/CoreML.framework/CoreML'
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _MLAllComputeDevices, _MLFeatureValueImageOptionCropAndScale,
@@ -12,8 +13,9 @@ exports:
                         MLComputePlanDeviceUsage, MLDictionaryConstraint,
                         MLDictionaryFeatureProvider, MLFeatureDescription, MLFeatureValue,
                         MLGPUComputeDevice, MLImageConstraint, MLImageSize, MLImageSizeConstraint,
-                        MLKey, MLMetricKey, MLModel, MLModelAsset, MLModelConfiguration,
-                        MLModelDescription, MLModelStructure, MLModelStructureNeuralNetwork,
+                        MLKey, MLMetricKey, MLModel, MLModelAsset, MLModelCollection,
+                        MLModelCollectionEntry, MLModelConfiguration, MLModelDescription,
+                        MLModelStructure, MLModelStructureNeuralNetwork,
                         MLModelStructureNeuralNetworkLayer, MLModelStructurePipeline,
                         MLModelStructureProgram, MLModelStructureProgramArgument,
                         MLModelStructureProgramBinding, MLModelStructureProgramBlock,

@@ -1,7 +1,0 @@
---- !tapi-tbd
-tbd-version:     4
-targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-install-name:    '/System/Library/Frameworks/AppIntents.framework/AppIntents'
-current-version: 301.0.51
-compatibility-version: 0
-...

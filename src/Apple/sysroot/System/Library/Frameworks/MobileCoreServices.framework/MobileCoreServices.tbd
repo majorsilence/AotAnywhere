@@ -2,46 +2,10 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices'
-current-version: 1226
-reexports:
+compatibility-version: 0.0.0
+exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    symbols:          [
-                        '$ld$install_name$os10.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os10.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os10.2$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os10.3$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os11.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os11.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os11.2$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os11.3$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os11.4$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os11.5$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os2.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os2.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os2.2$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os3.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os3.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os3.2$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os4.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os4.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os4.2$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os4.3$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os5.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os5.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os6.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os6.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os7.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os7.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os8.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os8.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os8.2$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os8.3$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os8.4$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os9.0$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os9.1$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os9.2$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        '$ld$install_name$os9.3$/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices',
-                        _UTTypeConformsTo, _UTTypeCopyAllTagsWithClass, _UTTypeCopyDeclaration,
+    symbols:          [ _UTTypeConformsTo, _UTTypeCopyAllTagsWithClass, _UTTypeCopyDeclaration,
                         _UTTypeCopyDeclaringBundleURL, _UTTypeCopyDescription,
                         _UTTypeCopyPreferredTagWithClass, _UTTypeCreateAllIdentifiersForTag,
                         _UTTypeCreatePreferredIdentifierForTag, _UTTypeEqual, _UTTypeIsDeclared,
@@ -89,5 +53,4 @@ reexports:
                         _kUTTypeVolume, _kUTTypeWaveformAudio, _kUTTypeWebArchive,
                         _kUTTypeWindowsExecutable, _kUTTypeX509Certificate, _kUTTypeXML,
                         _kUTTypeXMLPropertyList, _kUTTypeXPCService, _kUTTypeZipArchive ]
-    objc-classes:     [ NSUserActivity ]
 ...

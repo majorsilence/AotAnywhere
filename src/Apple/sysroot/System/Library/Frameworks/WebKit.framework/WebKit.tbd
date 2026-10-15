@@ -2,18 +2,10 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/WebKit.framework/WebKit'
-current-version: 625.1.29
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    symbols:          [
-                        '$ld$install_name$os4.3$/System/Library/PrivateFrameworks/WebKit.framework/WebKit',
-                        '$ld$install_name$os5.0$/System/Library/PrivateFrameworks/WebKit.framework/WebKit',
-                        '$ld$install_name$os5.1$/System/Library/PrivateFrameworks/WebKit.framework/WebKit',
-                        '$ld$install_name$os6.0$/System/Library/PrivateFrameworks/WebKit.framework/WebKit',
-                        '$ld$install_name$os6.1$/System/Library/PrivateFrameworks/WebKit.framework/WebKit',
-                        '$ld$install_name$os7.0$/System/Library/PrivateFrameworks/WebKit.framework/WebKit',
-                        '$ld$install_name$os7.1$/System/Library/PrivateFrameworks/WebKit.framework/WebKit',
-                        _NSReadAccessURLDocumentOption, _WKErrorDomain,
+    symbols:          [ _NSReadAccessURLDocumentOption, _WKErrorDomain,
                         _WKPreviewActionItemIdentifierAddToReadingList,
                         _WKPreviewActionItemIdentifierCopy, _WKPreviewActionItemIdentifierOpen,
                         _WKPreviewActionItemIdentifierShare,

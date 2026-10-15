@@ -1,15 +1,18 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
-  <!-- Builds net*-ios apps without a Mac / without Xcode installed.
+  <!-- Builds net*-ios apps without a Mac / without Xcode installed, for local development
+       (not App Store distribution).
 
        The workload launches every Xcode tool as a bare `xcrun <tool> ...` (or
        `clang`, `codesign`, ...) resolved from PATH. This package puts a
        directory of generated wrappers first on PATH - one per tool name, each
-       running AotAnywhere.AppleTools with its own name - and points the
-       workload at an imported Xcode folder (headers, .tbd stubs and platform
-       plists only; see AotAnywhereImportXcode). The workload keeps all of its
-       own logic; translation happens at the tool boundary (clang -> zig cc, C#
-       Mach-O tools).
+       running AotAnywhere.AppleTools with its own name. By default the workload
+       is pointed at a generated stand-in Xcode (version plists only); the
+       generated native code compiles against Objective-C declarations generated
+       from the bindings (AotAnywhereAppleGeneratedHeaders) and links against the
+       package's own linker stubs (AotAnywhereAppleLinkStubs). No Apple file is
+       needed. The workload keeps all of its own logic; translation happens at
+       the tool boundary (clang -> zig cc, C# Mach-O tools).
 
        Active for iOS targets on non-macOS hosts, and on macOS when
        AotAnywhereAppleForce=true (to test the off-Mac path on a Mac). -->
@@ -22,10 +25,21 @@
     <_AotAnywhereAppleActive>false</_AotAnywhereAppleActive>
     <_AotAnywhereAppleActive Condition="'$(TargetPlatformIdentifier)' == 'iOS' and (!$([MSBuild]::IsOSPlatform('OSX')) or '$(AotAnywhereAppleForce)' == 'true')">true</_AotAnywhereAppleActive>
 
-    <!-- Where AotAnywhereImportXcode puts the imported Xcode; overridable to use
-         any Xcode-shaped folder (including a real Xcode.app). -->
+    <!-- The Xcode the workload is pointed at:
+         - AotAnywhereXcodeDir, if set (any Xcode-shaped folder, including a real Xcode.app);
+         - else an Xcode imported with AotAnywhereImportXcode, if there is one;
+         - else (the default) a synthetic one generated into obj/: version plists only, from the
+           workload's own RecommendedXcodeVersion and SDK version. A synthetic Xcode has no SDK
+           headers or libraries, so generated headers and the package's linker stubs are used. -->
     <AotAnywhereHome Condition="'$(AotAnywhereHome)' == ''">$([MSBuild]::EnsureTrailingSlash('$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))')).aotanywhere/</AotAnywhereHome>
-    <AotAnywhereXcodeDir Condition="'$(AotAnywhereXcodeDir)' == ''">$(AotAnywhereHome)xcode/Xcode.app</AotAnywhereXcodeDir>
+    <_AotAnywhereImportedXcodeDir>$(AotAnywhereHome)xcode/Xcode.app</_AotAnywhereImportedXcodeDir>
+    <AotAnywhereXcodeDir Condition="'$(AotAnywhereXcodeDir)' == '' and Exists('$(_AotAnywhereImportedXcodeDir)/Contents/version.plist')">$(_AotAnywhereImportedXcodeDir)</AotAnywhereXcodeDir>
+    <_AotAnywhereSyntheticXcode Condition="'$(AotAnywhereXcodeDir)' == ''">true</_AotAnywhereSyntheticXcode>
+    <AotAnywhereXcodeDir Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'Xcode.app').TrimEnd('/').TrimEnd(''))</AotAnywhereXcodeDir>
+    <_AotAnywhereSyntheticSdkVersion>$(_XamarinTargetPlatformVersionExecutable)</_AotAnywhereSyntheticSdkVersion>
+    <_AotAnywhereSyntheticSdkVersion Condition="'$(_AotAnywhereSyntheticSdkVersion)' == ''">$(RecommendedXcodeVersion)</_AotAnywhereSyntheticSdkVersion>
+    <AotAnywhereAppleGeneratedHeaders Condition="'$(AotAnywhereAppleGeneratedHeaders)' == '' and '$(_AotAnywhereSyntheticXcode)' == 'true'">true</AotAnywhereAppleGeneratedHeaders>
+    <AotAnywhereAppleLinkStubs Condition="'$(AotAnywhereAppleLinkStubs)' == '' and '$(_AotAnywhereSyntheticXcode)' == 'true'">true</AotAnywhereAppleLinkStubs>
 
     <!-- The Xcode stand-in. Packed into build/tools/; a source/dev build falls
          back to the tool project's output, like AotAnywhereTasksAssembly. -->
@@ -74,8 +88,15 @@
 
     <Error Condition="!Exists('$(AotAnywhereAppleToolsDir)AotAnywhere.AppleTools.dll')"
            Text="AotAnywhere: AotAnywhere.AppleTools.dll was not found in '$(AotAnywhereAppleToolsDir)'. For a source build, run `dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release` first." />
+    <Error Condition="'$(_AotAnywhereSyntheticXcode)' == 'true' and ('$(RecommendedXcodeVersion)' == '' or '$(_AotAnywhereSyntheticSdkVersion)' == '')"
+           Text="AotAnywhere: the iOS workload's RecommendedXcodeVersion / SDK version properties were not found, so no stand-in Xcode can be generated. Set AotAnywhereXcodeDir to an Xcode folder." />
+    <Error Condition="'$(_AotAnywhereSyntheticXcode)' == 'true' and ('$(AotAnywhereAppleGeneratedHeaders)' != 'true' or '$(AotAnywhereAppleLinkStubs)' != 'true')"
+           Text="AotAnywhere: without an Xcode (AotAnywhereXcodeDir) there are no SDK headers or libraries, so AotAnywhereAppleGeneratedHeaders and AotAnywhereAppleLinkStubs must stay enabled." />
+    <Exec Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'"
+          Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; synthetic-xcode --out &quot;$(AotAnywhereXcodeDir)&quot; --xcode-version $(RecommendedXcodeVersion) --sdk-version $(_AotAnywhereSyntheticSdkVersion)"
+          StandardOutputImportance="Low" />
     <Error Condition="!Exists('$(AotAnywhereXcodeDir)/Contents/version.plist')"
-           Text="AotAnywhere: no Xcode found at '$(AotAnywhereXcodeDir)'. Import one from an Xcode .xip you downloaded from Apple: dotnet msbuild -t:AotAnywhereImportXcode -p:XcodeXip=/path/to/Xcode.xip (or set AotAnywhereXcodeDir to an existing Xcode folder)." />
+           Text="AotAnywhere: no Xcode found at '$(AotAnywhereXcodeDir)'. Set AotAnywhereXcodeDir to an Xcode folder, or leave it unset to build without one." />
     <Error Condition="'$(PublishAot)' != 'true' or '$(_IsPublishing)' != 'true'"
            Text="AotAnywhere: building iOS apps without a Mac requires Native AOT: use `dotnet publish -r ios-arm64 -p:PublishAot=true` (for the simulator: `dotnet build -r iossimulator-arm64 -p:PublishAot=true -p:_IsPublishing=true`). The Mono runtime's iOS AOT compiler only exists for macOS hosts." />
 
@@ -83,7 +104,7 @@
       <_AotAnywhereAppleBin>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'bin'))</_AotAnywhereAppleBin>
       <_AotAnywhereAppleBin>$(_AotAnywhereAppleBin.TrimEnd('/').TrimEnd('\'))</_AotAnywhereAppleBin>
 
-      <!-- Point the workload at the imported Xcode instead of xcode-select. -->
+      <!-- Point the workload at the chosen Xcode instead of xcode-select. -->
       <XcodeLocation>$(AotAnywhereXcodeDir)</XcodeLocation>
       <!-- Codesign launches $(CodesignPath)/codesign rather than going through xcrun. -->
       <CodesignPath>$(_AotAnywhereAppleBin)</CodesignPath>

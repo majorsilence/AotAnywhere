@@ -85,7 +85,21 @@ public static class MachoAutolink
         return new Analysis(result, undefined, weakOnly);
     }
 
-    sealed record ObjectFile(bool InArchive, List<string[]> LinkerOptions, List<string> Defined, List<string> Undefined, HashSet<string> WeakUndefined);
+    sealed record ObjectFile(bool InArchive, List<string[]> LinkerOptions, List<string> Defined, List<string> Undefined, HashSet<string> WeakUndefined, List<string> HiddenDefined);
+
+    /// <summary>A relocatable object's linker options and external symbols (Defined includes hidden ones).</summary>
+    public sealed record ObjectSymbols(IReadOnlyList<string[]> LinkerOptions, IReadOnlyList<string> Defined, IReadOnlyList<string> Undefined);
+
+    /// <summary>
+    /// Every relocatable object in a file - an object, an archive's members, of every slice of a
+    /// fat file - with its LC_LINKER_OPTIONs and external symbols (what <c>nm</c> and <c>otool -l</c>
+    /// would report, without needing either).
+    /// </summary>
+    public static List<ObjectSymbols> ReadObjects(string path) =>
+        FromFile(File.ReadAllBytes(path), AnyCpu, inArchive: false)
+            .Select(o => new ObjectSymbols(o.LinkerOptions, [.. o.Defined, .. o.HiddenDefined], o.Undefined)).ToList();
+
+    const int AnyCpu = -1;
 
     static List<ObjectFile> FromFile(byte[] data, int cpu, bool inArchive)
     {
@@ -93,16 +107,17 @@ public static class MachoAutolink
         if (span.Length >= 8 && BinaryPrimitives.ReadUInt32BigEndian(span) == FAT_MAGIC)
         {
             uint n = BinaryPrimitives.ReadUInt32BigEndian(span[4..]);
+            var slices = new List<ObjectFile>();
             for (int i = 0; i < n && 8 + (i + 1) * 20 <= span.Length; i++)
             {
                 var entry = span.Slice(8 + i * 20, 20);
-                if (BinaryPrimitives.ReadInt32BigEndian(entry) != cpu)
+                if (cpu != AnyCpu && BinaryPrimitives.ReadInt32BigEndian(entry) != cpu)
                     continue;
                 int offset = (int)BinaryPrimitives.ReadUInt32BigEndian(entry[8..]);
                 int size = (int)BinaryPrimitives.ReadUInt32BigEndian(entry[12..]);
-                return FromFile(data.AsSpan(offset, size).ToArray(), cpu, inArchive);
+                slices.AddRange(FromFile(data.AsSpan(offset, size).ToArray(), cpu, inArchive));
             }
-            return [];
+            return slices;
         }
         if (span.StartsWith("!<arch>\n"u8))
             return FromArchive(data, cpu);
@@ -142,12 +157,13 @@ public static class MachoAutolink
     static ObjectFile? FromObject(byte[] data, int cpu, bool inArchive)
     {
         var span = data.AsSpan();
-        if (span.Length < 32 || BinaryPrimitives.ReadUInt32LittleEndian(span) != MH_MAGIC_64 || BinaryPrimitives.ReadInt32LittleEndian(span[4..]) != cpu
+        if (span.Length < 32 || BinaryPrimitives.ReadUInt32LittleEndian(span) != MH_MAGIC_64 || (cpu != AnyCpu && BinaryPrimitives.ReadInt32LittleEndian(span[4..]) != cpu)
             || BinaryPrimitives.ReadUInt32LittleEndian(span[12..]) != 1 /* MH_OBJECT */)
             return null;
         var options = new List<string[]>();
         var defined = new List<string>();
         var undefined = new List<string>();
+        var hiddenDefined = new List<string>();
         var weakUndefined = new HashSet<string>(StringComparer.Ordinal);
         uint ncmds = BinaryPrimitives.ReadUInt32LittleEndian(span[16..]);
         int pos = 32;
@@ -199,13 +215,13 @@ public static class MachoAutolink
                     }
                     // Private externs (hidden symbols) aren't in an archive's table of contents,
                     // so they never cause a member to load.
-                    else if (kind is N_SECT or N_ABS && (type & N_PEXT) == 0)
-                        defined.Add(name);
+                    else if (kind is N_SECT or N_ABS)
+                        ((type & N_PEXT) == 0 ? defined : hiddenDefined).Add(name);
                 }
             }
             pos += cmdsize;
         }
-        return new ObjectFile(inArchive, options, defined, undefined, weakUndefined);
+        return new ObjectFile(inArchive, options, defined, undefined, weakUndefined, hiddenDefined);
     }
 
     /// <summary>

@@ -2,10 +2,9 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/OSLog.framework/OSLog'
-current-version: 1966.2.1
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    symbols:          [ __os_trace_personas_in_oslog_enabled ]
     objc-classes:     [ OSLogEntry, OSLogEntryActivity, OSLogEntryBoundary, OSLogEntryLog,
                         OSLogEntrySignpost, OSLogEnumerator, OSLogMessageComponent, OSLogPosition,
                         OSLogStore ]

@@ -2,6 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/BackgroundAssets.framework/BackgroundAssets'
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _BAAssetPackIdentifierErrorKey, _BADownloaderPriorityDefault,
@@ -9,54 +10,4 @@ exports:
                         _BAFailuresErrorKey, _BAManagedErrorDomain, _BASuccessesErrorKey ]
     objc-classes:     [ BAAppExtensionInfo, BAAssetPack, BAAssetPackManager, BAAssetPackManifest,
                         BADownload, BADownloadManager, BAURLDownload ]
-reexports:
-  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    symbols:          [ _CKAccountChangedNotification, _CKCurrentUserDefaultName, _CKErrorDomain,
-                        _CKErrorRetryAfterKey, _CKErrorUserDidResetEncryptedDataKey,
-                        _CKOwnerDefaultName, _CKPartialErrorsByItemIDKey,
-                        _CKQueryOperationMaximumResults, _CKRecordChangedErrorAncestorRecordKey,
-                        _CKRecordChangedErrorClientRecordKey, _CKRecordChangedErrorServerRecordKey,
-                        _CKRecordCreationDateKey, _CKRecordCreatorUserRecordIDKey,
-                        _CKRecordLastModifiedUserRecordIDKey, _CKRecordModificationDateKey,
-                        _CKRecordNameZoneWideShare, _CKRecordParentKey, _CKRecordRecordIDKey,
-                        _CKRecordShareKey, _CKRecordTypeShare, _CKRecordTypeUserRecord,
-                        _CKRecordZoneDefaultName, _CKShareThumbnailImageDataKey, _CKShareTitleKey,
-                        _CKShareTypeKey ]
-    objc-classes:     [ CKAcceptSharesOperation, CKAllowedSharingOptions, CKAsset, CKContainer,
-                        CKDatabase, CKDatabaseNotification, CKDatabaseOperation,
-                        CKDatabaseSubscription, CKDiscoverAllUserIdentitiesOperation,
-                        CKDiscoverUserIdentitiesOperation, CKFetchDatabaseChangesOperation,
-                        CKFetchRecordChangesOperation, CKFetchRecordZoneChangesConfiguration,
-                        CKFetchRecordZoneChangesOperation, CKFetchRecordZoneChangesOptions,
-                        CKFetchRecordZonesOperation, CKFetchRecordsOperation,
-                        CKFetchShareMetadataOperation, CKFetchShareParticipantsOperation,
-                        CKFetchSubscriptionsOperation, CKFetchWebAuthTokenOperation,
-                        CKLocationSortDescriptor, CKModifyRecordZonesOperation,
-                        CKModifyRecordsOperation, CKModifySubscriptionsOperation, CKNotification,
-                        CKNotificationID, CKNotificationInfo, CKOperation, CKOperationConfiguration,
-                        CKOperationGroup, CKQuery, CKQueryCursor, CKQueryNotification,
-                        CKQueryOperation, CKQuerySubscription, CKRecord, CKRecordID, CKRecordZone,
-                        CKRecordZoneID, CKRecordZoneNotification, CKRecordZoneSubscription,
-                        CKReference, CKServerChangeToken, CKShare, CKShareAccessRequester,
-                        CKShareBlockedIdentity, CKShareMetadata, CKShareParticipant,
-                        CKShareRequestAccessOperation, CKSubscription, CKSyncEngine,
-                        CKSyncEngineAccountChangeEvent, CKSyncEngineConfiguration,
-                        CKSyncEngineDidFetchChangesEvent,
-                        CKSyncEngineDidFetchRecordZoneChangesEvent, CKSyncEngineDidSendChangesEvent,
-                        CKSyncEngineEvent, CKSyncEngineFailedRecordSave, CKSyncEngineFailedZoneSave,
-                        CKSyncEngineFetchChangesContext, CKSyncEngineFetchChangesOptions,
-                        CKSyncEngineFetchChangesScope, CKSyncEngineFetchedDatabaseChangesEvent,
-                        CKSyncEngineFetchedRecordDeletion,
-                        CKSyncEngineFetchedRecordZoneChangesEvent, CKSyncEngineFetchedZoneDeletion,
-                        CKSyncEnginePendingDatabaseChange, CKSyncEnginePendingRecordZoneChange,
-                        CKSyncEnginePendingZoneDelete, CKSyncEnginePendingZoneSave,
-                        CKSyncEngineRecordZoneChangeBatch, CKSyncEngineSendChangesContext,
-                        CKSyncEngineSendChangesOptions, CKSyncEngineSendChangesScope,
-                        CKSyncEngineSentDatabaseChangesEvent,
-                        CKSyncEngineSentRecordZoneChangesEvent, CKSyncEngineState,
-                        CKSyncEngineStateSerialization, CKSyncEngineStateUpdateEvent,
-                        CKSyncEngineWillFetchChangesEvent,
-                        CKSyncEngineWillFetchRecordZoneChangesEvent,
-                        CKSyncEngineWillSendChangesEvent, CKSystemSharingUIObserver, CKUserIdentity,
-                        CKUserIdentityLookupInfo ]
 ...

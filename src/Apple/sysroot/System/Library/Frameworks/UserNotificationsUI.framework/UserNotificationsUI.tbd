@@ -2,4 +2,5 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/UserNotificationsUI.framework/UserNotificationsUI'
+compatibility-version: 0.0.0
 ...

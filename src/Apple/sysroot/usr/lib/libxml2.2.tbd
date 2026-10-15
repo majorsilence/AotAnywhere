@@ -2,6 +2,5 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/usr/lib/libxml2.2.dylib'
-current-version: 10.9.0
-compatibility-version: 10
+compatibility-version: 0.0.0
 ...

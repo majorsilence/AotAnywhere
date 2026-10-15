@@ -2,7 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/Network.framework/Network'
-current-version: 6681.2.2
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ __nw_connection_send_idempotent_content,
@@ -287,6 +287,4 @@ exports:
                         _nw_ws_response_add_additional_header, _nw_ws_response_create,
                         _nw_ws_response_enumerate_additional_headers,
                         _nw_ws_response_get_selected_subprotocol, _nw_ws_response_get_status ]
-    objc-classes:     [ NWBonjourServiceEndpoint, NWEndpoint, NWHostEndpoint, NWPath,
-                        NWTCPConnection, NWUDPSession ]
 ...

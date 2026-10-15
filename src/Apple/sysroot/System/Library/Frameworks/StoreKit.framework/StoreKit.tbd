@@ -2,6 +2,7 @@
 tbd-version:     4
 targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
 install-name:    '/System/Library/Frameworks/StoreKit.framework/StoreKit'
+compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ '_$s8StoreKit03AppA0O13requestReview2inySo13UIWindowSceneC_tFZ',
@@ -48,5 +49,5 @@ exports:
                         SKProductDiscount, SKProductStorePromotionController,
                         SKProductSubscriptionPeriod, SKProductsRequest, SKProductsResponse,
                         SKReceiptRefreshRequest, SKRequest, SKStoreProductViewController,
-                        SKStoreReviewController, SKStorefront ]
+                        SKStoreReviewController, SKStorefront, XamarinSwiftFunctions ]
 ...

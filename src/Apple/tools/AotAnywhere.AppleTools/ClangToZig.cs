@@ -15,6 +15,9 @@ public sealed record ZigInvocation(string Driver, IReadOnlyList<string> Args, IR
     /// <see cref="ClangToZig.ZigLibcFile"/>.
     /// </summary>
     public string? ZigLibc { get; init; }
+
+    /// <summary>Objective-C classes are left for dyld's flat lookup (see <see cref="StubLink"/>).</summary>
+    public bool FlatObjCClasses { get; init; }
 }
 
 /// <summary>A <c>-sectcreate &lt;segment&gt; &lt;section&gt; &lt;file&gt;</c> request.</summary>
@@ -209,6 +212,26 @@ public static class ClangToZig
     /// </summary>
     public static string ForceLoadAssembly(string library) =>
         $".section __DATA,__data\n.private_extern __swift_FORCE_LOAD_$_{library}\n.globl __swift_FORCE_LOAD_$_{library}\n__swift_FORCE_LOAD_$_{library}:\n.byte 0\n";
+
+    /// <summary>
+    /// Whether a failed zig link's output shows nothing but undefined Objective-C class symbols
+    /// (and the notes that go with them) - the case a stub link resolves by flat lookup.
+    /// </summary>
+    public static bool OnlyObjCClassesUndefined(string zigOutput)
+    {
+        bool any = false;
+        foreach (var raw in zigOutput.Split('\n'))
+        {
+            string line = raw.Trim();
+            if (line.Length == 0 || line.StartsWith("note:", StringComparison.Ordinal) || !line.Contains("error", StringComparison.Ordinal))
+                continue;
+            var m = System.Text.RegularExpressions.Regex.Match(line, @"^error: undefined symbol: (\S+)$");
+            if (!m.Success || !(m.Groups[1].Value.StartsWith("_OBJC_CLASS_$_", StringComparison.Ordinal) || m.Groups[1].Value.StartsWith("_OBJC_METACLASS_$_", StringComparison.Ordinal)))
+                return false;
+            any = true;
+        }
+        return any;
+    }
 
     /// <summary>The <c>--target=</c> argument of a translated invocation, for compiling side objects.</summary>
     public static string TargetOf(ZigInvocation inv) => inv.Args.First(a => a.StartsWith("--target=", StringComparison.Ordinal));

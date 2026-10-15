@@ -221,4 +221,22 @@ public class StubLinkTests
         await Assert.That(StubLink.LdDirectiveTarget("$ld$install_name$os4.0$/usr/lib/old.dylib")).IsEqualTo("");
         await Assert.That(StubLink.LdDirectiveTarget("_plain")).IsNull();
     }
+
+    [Test]
+    public async Task FlatClassesStayOutOfThePerLinkStubsButKeepTheirFrameworkLinked()
+    {
+        // The class is recorded under its namespace's framework only as a hint: the autolinked
+        // framework is kept (the class is used), but the class itself is left for flat lookup.
+        var s = new Sysroot();
+        s.Lib("libUIKit", "/System/UIKit", ["_OBJC_CLASS_$_NSLayoutConstraint"]);
+        s.Lib("libobjc", "/usr/lib/libobjc.A.dylib", ["_OBJC_CLASS_$_NSObject"]);
+
+        var args = StubLink.Prepare([.. Device, $"-L{s.Root}/usr/lib", "-lobjc", "-lUIKit"], s.Root, s.LinkRoot,
+            autolinkStart: Device.Length + 2, referenced: new HashSet<string> { "_OBJC_CLASS_$_NSLayoutConstraint", "_OBJC_CLASS_$_NSObject" },
+            flatObjCClasses: true);
+
+        await Assert.That(args).Contains("-lUIKit");
+        await Assert.That(s.Exports("libUIKit")).DoesNotContain("_OBJC_CLASS_$_NSLayoutConstraint");
+        await Assert.That(s.Exports("libobjc")).Contains("_OBJC_CLASS_$_NSObject");
+    }
 }
