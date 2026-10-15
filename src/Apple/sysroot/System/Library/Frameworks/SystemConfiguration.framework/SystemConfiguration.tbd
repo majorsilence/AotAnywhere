@@ -1,0 +1,18 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/SystemConfiguration.framework/SystemConfiguration'
+current-version: 1446
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CNCopyCurrentNetworkInfo, _CNCopySupportedInterfaces, _CNMarkPortalOffline,
+                        _CNMarkPortalOnline, _CNSetSupportedSSIDs, _SCError, _SCErrorString,
+                        _SCNetworkReachabilityCreateWithAddress,
+                        _SCNetworkReachabilityCreateWithAddressPair,
+                        _SCNetworkReachabilityCreateWithName, _SCNetworkReachabilityGetFlags,
+                        _SCNetworkReachabilityScheduleWithRunLoop,
+                        _SCNetworkReachabilitySetCallback, _SCNetworkReachabilitySetDispatchQueue,
+                        _SCNetworkReachabilityUnscheduleFromRunLoop,
+                        _kCFErrorDomainSystemConfiguration, _kCNNetworkInfoKeyBSSID,
+                        _kCNNetworkInfoKeySSID, _kCNNetworkInfoKeySSIDData ]
+...

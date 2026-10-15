@@ -1,0 +1,14 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Accounts.framework/Accounts'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _ACAccountStoreDidChangeNotification, _ACAccountTypeIdentifierFacebook,
+                        _ACAccountTypeIdentifierSinaWeibo, _ACAccountTypeIdentifierTencentWeibo,
+                        _ACAccountTypeIdentifierTwitter, _ACErrorDomain, _ACFacebookAppIdKey,
+                        _ACFacebookAudienceEveryone, _ACFacebookAudienceFriends,
+                        _ACFacebookAudienceKey, _ACFacebookAudienceOnlyMe,
+                        _ACFacebookPermissionsKey, _ACTencentWeiboAppIdKey ]
+    objc-classes:     [ ACAccount, ACAccountCredential, ACAccountStore, ACAccountType ]
+...

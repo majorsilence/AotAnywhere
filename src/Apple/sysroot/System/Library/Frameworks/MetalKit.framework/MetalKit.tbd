@@ -1,0 +1,24 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/MetalKit.framework/MetalKit'
+current-version: 174.4.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _MTKMetalVertexDescriptorFromModelIO,
+                        _MTKMetalVertexDescriptorFromModelIOWithError,
+                        _MTKMetalVertexFormatFromModelIO, _MTKModelErrorDomain, _MTKModelErrorKey,
+                        _MTKModelIOVertexDescriptorFromMetal,
+                        _MTKModelIOVertexDescriptorFromMetalWithError,
+                        _MTKModelIOVertexFormatFromMetal, _MTKTextureLoaderCubeLayoutVertical,
+                        _MTKTextureLoaderErrorDomain, _MTKTextureLoaderErrorKey,
+                        _MTKTextureLoaderOptionAllocateMipmaps, _MTKTextureLoaderOptionCubeLayout,
+                        _MTKTextureLoaderOptionGenerateMipmaps, _MTKTextureLoaderOptionLoadAsArray,
+                        _MTKTextureLoaderOptionOrigin, _MTKTextureLoaderOptionSRGB,
+                        _MTKTextureLoaderOptionTextureCPUCacheMode,
+                        _MTKTextureLoaderOptionTextureStorageMode,
+                        _MTKTextureLoaderOptionTextureUsage, _MTKTextureLoaderOriginBottomLeft,
+                        _MTKTextureLoaderOriginFlippedVertically, _MTKTextureLoaderOriginTopLeft ]
+    objc-classes:     [ MTKMesh, MTKMeshBuffer, MTKMeshBufferAllocator, MTKSubmesh,
+                        MTKTextureLoader, MTKView ]
+...

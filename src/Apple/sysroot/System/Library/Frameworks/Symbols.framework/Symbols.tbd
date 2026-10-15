@@ -1,0 +1,15 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Symbols.framework/Symbols'
+current-version: 204
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    objc-classes:     [ NSSymbolAppearEffect, NSSymbolAutomaticContentTransition,
+                        NSSymbolBounceEffect, NSSymbolBreatheEffect, NSSymbolContentTransition,
+                        NSSymbolDisappearEffect, NSSymbolDrawOffEffect, NSSymbolDrawOnEffect,
+                        NSSymbolEffect, NSSymbolEffectOptions, NSSymbolEffectOptionsRepeatBehavior,
+                        NSSymbolMagicReplaceContentTransition, NSSymbolPulseEffect,
+                        NSSymbolReplaceContentTransition, NSSymbolRotateEffect, NSSymbolScaleEffect,
+                        NSSymbolVariableColorEffect, NSSymbolWiggleEffect ]
+...

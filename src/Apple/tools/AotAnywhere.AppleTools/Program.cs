@@ -87,10 +87,46 @@ static class Tools
                     ObjCShims.EnsureHeader(shimDir, header);
         }
 
-        var inv = ClangToZig.Translate(tool, args, shims);
+        // Set when linking against AotAnywhere's stubs (AotAnywhereAppleLinkStubs) instead of the SDK.
+        LinkStubs? stubs = Environment.GetEnvironmentVariable("AOTANYWHERE_APPLE_SYSROOT") is { Length: > 0 } sysroot
+            ? new LinkStubs(sysroot, Environment.GetEnvironmentVariable("DEVELOPER_DIR"), Path.Combine(Path.GetDirectoryName(Zig())!, "lib", "libc", "include", "any-darwin-any"))
+            : null;
+
+        var inv = ClangToZig.Translate(tool, args, shims, stubs);
+        int autolinkStart = inv.Args.Count;
+        IReadOnlySet<string>? referenced = null, weakOnly = null;
         if (!args.Contains("-c"))
-            inv = inv with { Args = [.. inv.Args, .. Autolink(args, inv.Args)] };
-        int exit = RunZig(inv);
+        {
+            // Stub links decide which autolinked libraries are used in StubLink, after applying
+            // the stubs' back-deployment directives; SDK links decide here.
+            var added = Autolink(args, inv.Args, stubs is null, out var missing, out referenced, out weakOnly);
+            inv = inv with
+            {
+                Args = [.. inv.Args, .. added],
+                ExtraAssembly = missing.Where(l => l.StartsWith("swiftCompatibility", StringComparison.Ordinal)).Select(ClangToZig.ForceLoadAssembly).ToList(),
+            };
+        }
+        // Stub links bind through a per-link copy of the stubs (see StubLink).
+        string? linkSysroot = null;
+        if (stubs is not null && !args.Contains("-c"))
+        {
+            linkSysroot = Directory.CreateTempSubdirectory("aotanywhere-stubs-").FullName;
+            inv = inv with
+            {
+                Args = StubLink.Prepare(inv.Args, stubs.Sysroot, linkSysroot, autolinkStart, referenced, weakOnly),
+                ZigLibc = ClangToZig.ZigLibcFile(stubs with { Sysroot = linkSysroot }),
+            };
+        }
+        int exit;
+        try
+        {
+            exit = RunZig(inv);
+        }
+        finally
+        {
+            if (linkSysroot is not null && !Debug)
+                Directory.Delete(linkSysroot, recursive: true);
+        }
         // Like clang, leave no output behind on failure: zig can leave an empty object, which
         // the workload's incremental build would then take as up to date.
         if (exit != 0 && args.IndexOf("-o") is int o and >= 0 && o + 1 < args.Count && File.Exists(args[o + 1]))
@@ -99,19 +135,28 @@ static class Tools
     }
 
     // The libraries and frameworks the link's objects ask for through LC_LINKER_OPTION.
-    static List<string> Autolink(List<string> clangArgs, IReadOnlyList<string> zigArgs)
+    static List<string> Autolink(List<string> clangArgs, IReadOnlyList<string> zigArgs, bool onlyNeeded, out List<string> missing,
+        out IReadOnlySet<string>? referenced, out IReadOnlySet<string>? weakOnly)
     {
+        missing = [];
+        referenced = weakOnly = null;
         int a = clangArgs.IndexOf("-arch");
         if (a < 0 || a + 1 >= clangArgs.Count)
             return [];
         var inputs = clangArgs.Where(x => !x.StartsWith('-') && (x.EndsWith(".a", StringComparison.Ordinal) || x.EndsWith(".o", StringComparison.Ordinal)) && File.Exists(x)).ToList();
-        // Static frameworks (xcframework slices, e.g. MAUI's Swift interop library) linked by name.
+        // Static libraries linked by name (libxamarin, the runtime's), and static frameworks
+        // (xcframework slices, e.g. MAUI's Swift interop library).
+        var libraryDirs = SearchDirs(clangArgs, "-L");
+        foreach (var l in clangArgs.Where(x => x.StartsWith("-l", StringComparison.Ordinal) && x.Length > 2))
+            inputs.AddRange(libraryDirs.Select(d => Path.Combine(d, "lib" + l[2..] + ".a")).Where(File.Exists).Take(1));
         var frameworkDirs = SearchDirs(clangArgs, "-F");
         for (int i = 0; i + 1 < clangArgs.Count; i++)
             if (clangArgs[i] is "-framework" or "-weak_framework")
                 inputs.AddRange(frameworkDirs.Select(d => Path.Combine(d, clangArgs[i + 1] + ".framework", clangArgs[i + 1])).Where(File.Exists).Take(1));
-        var options = MachoAutolink.Collect(inputs, clangArgs[a + 1]);
-        return MachoAutolink.Resolve(options, SearchDirs(zigArgs, "-L"), SearchDirs(zigArgs, "-F"), zigArgs.ToList());
+        var analysis = MachoAutolink.Analyze(inputs, clangArgs[a + 1]);
+        referenced = analysis.Undefined;
+        weakOnly = analysis.WeakOnly;
+        return MachoAutolink.Resolve(analysis.Options, SearchDirs(zigArgs, "-L"), SearchDirs(zigArgs, "-F"), zigArgs.ToList(), out missing, onlyNeeded ? analysis.Undefined : null);
     }
 
     static List<string> SearchDirs(IReadOnlyList<string> args, string flag)
@@ -129,29 +174,39 @@ static class Tools
 
     static int RunZig(ZigInvocation inv)
     {
+        var sources = (inv.Sections ?? []).Select(ClangToZig.SectionAssembly).Concat(inv.ExtraAssembly).ToList();
+        if (sources.Count == 0 && inv.ZigLibc is null)
+            return Exec(Zig(), [inv.Driver, .. inv.Args]);
+
+        // Side objects for what zig's linker can't do itself (-sectcreate, toolchain-only
+        // libraries), and the libc installation file for stub links.
         var linkArgs = inv.Args.ToList();
-        if (inv.Sections is { Count: > 0 })
+        var dir = Directory.CreateTempSubdirectory("aotanywhere-link-").FullName;
+        try
         {
-            var dir = Directory.CreateTempSubdirectory("aotanywhere-sect-").FullName;
-            try
+            for (int i = 0; i < sources.Count; i++)
             {
-                for (int i = 0; i < inv.Sections.Count; i++)
-                {
-                    string asm = Path.Combine(dir, $"sect{i}.s"), obj = Path.Combine(dir, $"sect{i}.o");
-                    File.WriteAllText(asm, ClangToZig.SectionAssembly(inv.Sections[i]));
-                    int rc = Exec(Zig(), ["cc", ClangToZig.TargetOf(inv), "-c", asm, "-o", obj]);
-                    if (rc != 0)
-                        return rc;
-                    linkArgs.Add(obj);
-                }
-                return Exec(Zig(), [inv.Driver, .. linkArgs]);
+                string asm = Path.Combine(dir, $"extra{i}.s"), obj = Path.Combine(dir, $"extra{i}.o");
+                File.WriteAllText(asm, sources[i]);
+                int rc = Exec(Zig(), ["cc", ClangToZig.TargetOf(inv), "-c", asm, "-o", obj]);
+                if (rc != 0)
+                    return rc;
+                linkArgs.Add(obj);
             }
-            finally
+            Dictionary<string, string>? env = null;
+            if (inv.ZigLibc is not null)
             {
-                Directory.Delete(dir, recursive: true);
+                string libc = Path.Combine(dir, "libc.txt");
+                File.WriteAllText(libc, inv.ZigLibc);
+                env = new() { ["ZIG_LIBC"] = libc };
             }
+            return Exec(Zig(), [inv.Driver, .. linkArgs], env);
         }
-        return Exec(Zig(), [inv.Driver, .. linkArgs]);
+        finally
+        {
+            if (!Debug)
+                Directory.Delete(dir, recursive: true);
+        }
     }
 
     // install_name_tool [-id <name>] [-change <old> <new>]... <file>
@@ -335,11 +390,18 @@ static class Tools
         return 0;
     }
 
-    static int Exec(string fileName, IEnumerable<string> arguments)
+    // AOTANYWHERE_APPLE_DEBUG=1: log the commands run and keep per-link temporary files.
+    static readonly bool Debug = Environment.GetEnvironmentVariable("AOTANYWHERE_APPLE_DEBUG") is "1" or "true";
+
+    static int Exec(string fileName, IEnumerable<string> arguments, Dictionary<string, string>? environment = null)
     {
+        if (Debug)
+            Console.Error.WriteLine("AotAnywhere: " + string.Join(' ', (environment ?? []).Select(e => $"{e.Key}={e.Value}").Append(fileName).Concat(arguments).Select(a => a.Contains(' ') ? $"'{a}'" : a)));
         var psi = new ProcessStartInfo(fileName) { UseShellExecute = false };
         foreach (var a in arguments)
             psi.ArgumentList.Add(a);
+        foreach (var (k, v) in environment ?? [])
+            psi.Environment[k] = v;
         using var p = Process.Start(psi) ?? throw new AppleToolException($"AotAnywhere: failed to start '{fileName}'.");
         p.WaitForExit();
         return p.ExitCode;

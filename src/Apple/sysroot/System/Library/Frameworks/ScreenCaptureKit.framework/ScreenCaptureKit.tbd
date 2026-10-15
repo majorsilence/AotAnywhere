@@ -1,0 +1,15 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/ScreenCaptureKit.framework/ScreenCaptureKit'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _SCStreamErrorDomain, _SCStreamFrameInfoContentRect,
+                        _SCStreamFrameInfoContentScale, _SCStreamFrameInfoDisplayTime,
+                        _SCStreamFrameInfoScaleFactor, _SCStreamFrameInfoScreenRect,
+                        _SCStreamFrameInfoStatus, _SCStreamFrameInfoVideoOrientation ]
+    objc-classes:     [ SCClipBufferingOutput, SCContentFilter, SCContentSharingPicker,
+                        SCContentSharingPickerConfiguration, SCRecordingEditor, SCRecordingOutput,
+                        SCRecordingOutputConfiguration, SCStream, SCStreamConfiguration,
+                        SCVideoEffectOutput ]
+...

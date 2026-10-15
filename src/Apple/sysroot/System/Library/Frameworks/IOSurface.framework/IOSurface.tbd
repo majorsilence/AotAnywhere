@@ -1,0 +1,22 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/IOSurface.framework/IOSurface'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _IOSurfacePropertyAllocSizeKey, _IOSurfacePropertyKeyAllocSize,
+                        _IOSurfacePropertyKeyBytesPerElement, _IOSurfacePropertyKeyBytesPerRow,
+                        _IOSurfacePropertyKeyCacheMode, _IOSurfacePropertyKeyElementHeight,
+                        _IOSurfacePropertyKeyElementWidth, _IOSurfacePropertyKeyHeight,
+                        _IOSurfacePropertyKeyName, _IOSurfacePropertyKeyOffset,
+                        _IOSurfacePropertyKeyPixelFormat,
+                        _IOSurfacePropertyKeyPixelSizeCastingAllowed,
+                        _IOSurfacePropertyKeyPlaneBase, _IOSurfacePropertyKeyPlaneBytesPerElement,
+                        _IOSurfacePropertyKeyPlaneBytesPerRow,
+                        _IOSurfacePropertyKeyPlaneElementHeight,
+                        _IOSurfacePropertyKeyPlaneElementWidth, _IOSurfacePropertyKeyPlaneHeight,
+                        _IOSurfacePropertyKeyPlaneInfo, _IOSurfacePropertyKeyPlaneOffset,
+                        _IOSurfacePropertyKeyPlaneSize, _IOSurfacePropertyKeyPlaneWidth,
+                        _IOSurfacePropertyKeyWidth ]
+    objc-classes:     [ IOSurface ]
+...

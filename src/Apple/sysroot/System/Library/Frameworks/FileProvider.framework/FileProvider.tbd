@@ -1,0 +1,52 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/FileProvider.framework/FileProvider'
+current-version: 4838.0.125
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ '$ld$hide$os10.0$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os10.0$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os10.1$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os10.1$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os10.2$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os10.2$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os10.3$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os10.3$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os6.1$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os6.1$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os7.0$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os7.0$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os7.1$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os7.1$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.0$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.0$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.1$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.1$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.2$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.2$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.3$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.3$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.4$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os8.4$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.0$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.0$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.1$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.1$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.2$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.2$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.3$_OBJC_CLASS_$_NSFileProviderExtension',
+                        '$ld$hide$os9.3$_OBJC_METACLASS_$_NSFileProviderExtension',
+                        _NSFileProviderDomainDidChange, _NSFileProviderErrorCollidingItemKey,
+                        _NSFileProviderErrorDomain, _NSFileProviderErrorItemKey,
+                        _NSFileProviderErrorNonExistentItemIdentifierKey,
+                        _NSFileProviderFavoriteRankUnranked, _NSFileProviderInitialPageSortedByDate,
+                        _NSFileProviderInitialPageSortedByName,
+                        _NSFileProviderMaterializedSetDidChange, _NSFileProviderPendingSetDidChange,
+                        _NSFileProviderRootContainerItemIdentifier,
+                        _NSFileProviderTrashContainerItemIdentifier,
+                        _NSFileProviderUserInfoExperimentIDKey,
+                        _NSFileProviderWorkingSetContainerItemIdentifier ]
+    objc-classes:     [ NSFileProviderDomain, NSFileProviderDomainVersion, NSFileProviderExtension,
+                        NSFileProviderItemVersion, NSFileProviderManager, NSFileProviderRequest ]
+...

@@ -1,0 +1,15 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Cinematic.framework/Cinematic'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CNCinematicErrorDomain ]
+    objc-classes:     [ CNAssetInfo, CNAssetPreprocessConfiguration, CNAssetSpatialAudioInfo,
+                        CNBoundsPrediction, CNCompositionInfo, CNCustomDetectionTrack, CNDecision,
+                        CNDetection, CNDetectionTrack, CNFixedDetectionTrack,
+                        CNImageRenderingSession, CNImageRenderingSessionConfiguration,
+                        CNObjectTracker, CNRenderingSession, CNRenderingSessionAttributes,
+                        CNRenderingSessionFrameAttributes, CNScript, CNScriptChanges,
+                        CNScriptFrame ]
+...

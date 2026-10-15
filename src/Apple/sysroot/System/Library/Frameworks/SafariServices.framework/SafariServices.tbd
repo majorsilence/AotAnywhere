@@ -1,0 +1,15 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/SafariServices.framework/SafariServices'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _SFAuthenticationErrorDomain, _SFContentBlockerErrorDomain, _SFErrorDomain,
+                        _SFExtensionMessageKey, _SFExtensionProfileKey, _SSReadingListErrorDomain ]
+    objc-classes:     [ SFAddToHomeScreenInfo, SFAuthenticationSession, SFContentBlockerManager,
+                        SFContentBlockerState, SFSafariExtensionManager, SFSafariExtensionState,
+                        SFSafariSettings, SFSafariViewController,
+                        SFSafariViewControllerActivityButton, SFSafariViewControllerConfiguration,
+                        SFSafariViewControllerDataStore, SFSafariViewControllerPrewarmingToken,
+                        SSReadingList ]
+...

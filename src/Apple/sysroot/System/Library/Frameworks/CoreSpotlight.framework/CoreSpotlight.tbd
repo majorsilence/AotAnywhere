@@ -1,0 +1,19 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreSpotlight.framework/CoreSpotlight'
+current-version: 2459.105.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CSActionIdentifier, _CSIndexErrorDomain, _CSMailboxArchive,
+                        _CSMailboxDrafts, _CSMailboxInbox, _CSMailboxJunk, _CSMailboxSent,
+                        _CSMailboxTrash, _CSQueryContinuationActionType, _CSSearchQueryErrorDomain,
+                        _CSSearchQueryString, _CSSearchableItemActionType,
+                        _CSSearchableItemActivityIdentifier, _CSSuggestionHighlightAttributeName,
+                        _CoreSpotlightVersionNumber, _CoreSpotlightVersionString ]
+    objc-classes:     [ CSCustomAttributeKey, CSImportExtension, CSIndexExtensionRequestHandler,
+                        CSLocalizedString, CSPerson, CSSearchQuery, CSSearchQueryContext,
+                        CSSearchableIndex, CSSearchableIndexDescription, CSSearchableItem,
+                        CSSearchableItemAttributeSet, CSSuggestion, CSUserQuery,
+                        CSUserQueryContext ]
+...

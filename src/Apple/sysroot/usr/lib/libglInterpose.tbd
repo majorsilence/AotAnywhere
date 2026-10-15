@@ -1,0 +1,7 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/usr/lib/libglInterpose.dylib'
+current-version: 310.8.0
+compatibility-version: 18.1.0
+...

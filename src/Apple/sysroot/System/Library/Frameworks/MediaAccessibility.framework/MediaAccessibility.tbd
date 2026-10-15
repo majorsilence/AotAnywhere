@@ -1,0 +1,38 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/MediaAccessibility.framework/MediaAccessibility'
+current-version: 62
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _MAAudibleMediaCopyPreferredCharacteristics,
+                        _MACaptionAppearanceAddSelectedLanguage,
+                        _MACaptionAppearanceCopyActiveProfileID,
+                        _MACaptionAppearanceCopyBackgroundColor,
+                        _MACaptionAppearanceCopyFontDescriptorForStyle,
+                        _MACaptionAppearanceCopyForegroundColor,
+                        _MACaptionAppearanceCopyPreferredCaptioningMediaCharacteristics,
+                        _MACaptionAppearanceCopyProfileIDs, _MACaptionAppearanceCopyProfileName,
+                        _MACaptionAppearanceCopySelectedLanguages,
+                        _MACaptionAppearanceCopyWindowColor, _MACaptionAppearanceDidDisplayCaptions,
+                        _MACaptionAppearanceExecuteBlockForProfileID,
+                        _MACaptionAppearanceGetBackgroundOpacity,
+                        _MACaptionAppearanceGetDisplayType,
+                        _MACaptionAppearanceGetForegroundOpacity,
+                        _MACaptionAppearanceGetRelativeCharacterSize,
+                        _MACaptionAppearanceGetTextEdgeStyle, _MACaptionAppearanceGetWindowOpacity,
+                        _MACaptionAppearanceGetWindowRoundedCornerRadius,
+                        _MACaptionAppearanceIsCustomized, _MACaptionAppearanceSetActiveProfileID,
+                        _MACaptionAppearanceSetDisplayType, _MADimFlashingLightsEnabled,
+                        _MAImageCaptioningCopyCaption, _MAImageCaptioningCopyMetadataTagPath,
+                        _MAImageCaptioningSetCaption,
+                        _MAMediaCharacteristicDescribesMusicAndSoundForAccessibility,
+                        _MAMediaCharacteristicDescribesVideoForAccessibility,
+                        _MAMediaCharacteristicTranscribesSpokenDialogForAccessibility,
+                        _MAMusicHapticsManagerActiveStatusDidChangeNotification,
+                        _kMAAudibleMediaSettingsChangedNotification,
+                        _kMACaptionAppearanceSettingsChangedNotification,
+                        _kMADimFlashingLightsChangedNotification ]
+    objc-classes:     [ MAFlashingLightsProcessor, MAFlashingLightsProcessorResult,
+                        MAMusicHapticsManager ]
+...

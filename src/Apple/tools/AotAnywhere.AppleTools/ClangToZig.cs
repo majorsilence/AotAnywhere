@@ -5,7 +5,17 @@ namespace AotAnywhere.AppleTools;
 /// <c>-sectcreate</c> requests, which zig's linker doesn't support: the caller assembles each file
 /// into an object (<see cref="ClangToZig.SectionAssembly"/>) and appends it to <paramref name="Args"/>.
 /// </summary>
-public sealed record ZigInvocation(string Driver, IReadOnlyList<string> Args, IReadOnlyList<SectionInput>? Sections = null);
+public sealed record ZigInvocation(string Driver, IReadOnlyList<string> Args, IReadOnlyList<SectionInput>? Sections = null)
+{
+    /// <summary>Extra assembly sources to assemble and link alongside (see <see cref="ClangToZig.ForceLoadAssembly"/>).</summary>
+    public IReadOnlyList<string> ExtraAssembly { get; init; } = [];
+
+    /// <summary>
+    /// A zig libc installation file (passed as <c>ZIG_LIBC</c>) to link with, or null. See
+    /// <see cref="ClangToZig.ZigLibcFile"/>.
+    /// </summary>
+    public string? ZigLibc { get; init; }
+}
 
 /// <summary>A <c>-sectcreate &lt;segment&gt; &lt;section&gt; &lt;file&gt;</c> request.</summary>
 public sealed record SectionInput(string Segment, string Section, string File);
@@ -16,6 +26,13 @@ public sealed record SectionInput(string Segment, string Section, string File);
 /// zig's open-source Darwin libc/objc4 headers (<c>lib/libc/include/any-darwin-any</c>).
 /// </summary>
 public sealed record HeaderShims(string ShimDir, string DarwinLibcInclude);
+
+/// <summary>
+/// Link against AotAnywhere's own .tbd stubs (src/Apple/sysroot) instead of the SDK's. Search
+/// paths the workload passes into <paramref name="XcodeDir"/> (the SDK, the toolchain's Swift
+/// libraries) are dropped, so nothing of Xcode's is read even when it exists.
+/// </summary>
+public sealed record LinkStubs(string Sysroot, string? XcodeDir, string DarwinLibcInclude = "");
 
 /// <summary>
 /// Translates the Apple clang command lines the net*-ios workload builds (CompileNativeCode for
@@ -35,25 +52,15 @@ public sealed record HeaderShims(string ShimDir, string DarwinLibcInclude);
 /// </summary>
 public static class ClangToZig
 {
-    // zig ignores LC_LINKER_OPTION, so the overlays libswiftCore pulls in through
-    // autolinking have to be named explicitly - the same list the macOS link
-    // takeover uses (src/DirectLink.targets, _AotAnywhereSwiftOverlayLib).
-    static readonly string[] SwiftOverlays =
-    [
-        "swiftCoreFoundation", "swiftDarwin", "swiftDispatch", "swiftFoundation", "swiftObjectiveC",
-        "swiftXPC", "swift_Builtin_float", "swift_errno", "swift_math", "swift_signal", "swift_stdio",
-        "swift_time", "swiftsys_time", "swiftunistd",
-    ];
-
     static readonly string[] CxxSourceExtensions = [".mm", ".cpp", ".cc", ".cxx"];
 
-    public static ZigInvocation Translate(string tool, IReadOnlyList<string> args, HeaderShims? shims = null)
+    public static ZigInvocation Translate(string tool, IReadOnlyList<string> args, HeaderShims? shims = null, LinkStubs? stubs = null)
     {
         if (tool is not ("clang" or "clang++"))
             throw new AppleToolException($"AotAnywhere: unexpected compiler driver '{tool}'.");
 
         string? sdk = null, arch = null, minOS = null;
-        bool simulator = false, compile = false, cxxSource = false, hasLibCxx = false, hasSwift = false;
+        bool simulator = false, compile = false, cxxSource = false, hasLibCxx = false;
         var rest = new List<string>();
         var sections = new List<SectionInput>();
 
@@ -95,9 +102,6 @@ public static class ClangToZig
                 case "-sectcreate":
                     sections.Add(new SectionInput(Next(args, ref i, a), Next(args, ref i, a), Next(args, ref i, a)));
                     continue;
-                case "-lswiftCore":
-                    hasSwift = true;
-                    break;
             }
 
             if (TryParseMinVersion(a, out var platform, out var version))
@@ -158,18 +162,36 @@ public static class ClangToZig
 
         // Link with `zig cc` even for clang++: zig's c++ driver would link its own
         // libc++, and the SDK's is the one the app must load at run time.
-        zigArgs.AddRange(rest);
-        if (hasLibCxx || tool == "clang++")
-            zigArgs.Add($"{sdk}/usr/lib/libc++.tbd");
-        zigArgs.Add($"-L{sdk}/usr/lib");
-        zigArgs.Add("-lSystem");
-        if (hasSwift)
+        string libRoot = sdk;
+        if (stubs is not null)
         {
-            zigArgs.Add("-Wl,-dead_strip_dylibs");
-            zigArgs.AddRange(SwiftOverlays.Select(l => "-l" + l));
+            libRoot = stubs.Sysroot;
+            zigArgs.RemoveAll(a => a.StartsWith("-F" + sdk, StringComparison.Ordinal));
+            zigArgs.Add($"-F{libRoot}/System/Library/Frameworks");
+            rest = WithoutSearchPathsUnder(rest, stubs.XcodeDir);
         }
-        return new ZigInvocation("cc", zigArgs, sections);
+        zigArgs.AddRange(WithoutDuplicateLibraries(rest));
+        if (hasLibCxx || tool == "clang++")
+            zigArgs.Add($"{libRoot}/usr/lib/libc++.tbd");
+        zigArgs.Add($"-L{libRoot}/usr/lib");
+        // Swift overlays and other LC_LINKER_OPTION libraries are added by the caller's autolink
+        // pass (MachoAutolink), from here. Not -dead_strip_dylibs: like ld64, keep every library
+        // the workload names, since managed code can look classes up by name at run time.
+        zigArgs.Add($"-L{libRoot}/usr/lib/swift");
+        zigArgs.Add("-lSystem");
+        return new ZigInvocation("cc", zigArgs, sections) { ZigLibc = stubs is null ? null : ZigLibcFile(stubs) };
     }
+
+    /// <summary>
+    /// For device targets zig links its own bundled libSystem stub (macOS-only, so nothing
+    /// resolves) in addition to any -lSystem it is given, which leaves the app with two
+    /// libSystem load commands that dyld refuses. Naming the stub sysroot as zig's libc
+    /// installation makes zig take libSystem from it instead (and the SDK version for
+    /// LC_BUILD_VERSION from its SDKSettings.json).
+    /// </summary>
+    public static string ZigLibcFile(LinkStubs stubs) =>
+        $"include_dir={stubs.DarwinLibcInclude}\nsys_include_dir={stubs.DarwinLibcInclude}\ncrt_dir={stubs.Sysroot}/usr/lib\n" +
+        $"msvc_lib_dir=\nkernel32_lib_dir=\ngcc_dir=\ndarwin_sdk_dir={stubs.Sysroot}\n";
 
     /// <summary>
     /// Assembly source for an object carrying <paramref name="input"/>'s file as its own section,
@@ -178,8 +200,78 @@ public static class ClangToZig
     public static string SectionAssembly(SectionInput input) =>
         $".section {input.Segment},{input.Section},regular,no_dead_strip\n.incbin \"{input.File.Replace("\\", "/").Replace("\"", "\\\"")}\"\n";
 
+    /// <summary>
+    /// Defines <c>__swift_FORCE_LOAD_$_&lt;library&gt;</c> for a Swift library that only ships with
+    /// Xcode's toolchain (<c>swiftCompatibility56</c>, <c>swiftCompatibilityConcurrency</c>): Swift
+    /// objects reference that marker to make ld64 pull the static library in. Those libraries
+    /// back-deploy runtime fixes to older OS versions; without them the app links and runs, minus
+    /// the back-deployed fixes on OS versions that predate them.
+    /// </summary>
+    public static string ForceLoadAssembly(string library) =>
+        $".section __DATA,__data\n.private_extern __swift_FORCE_LOAD_$_{library}\n.globl __swift_FORCE_LOAD_$_{library}\n__swift_FORCE_LOAD_$_{library}:\n.byte 0\n";
+
     /// <summary>The <c>--target=</c> argument of a translated invocation, for compiling side objects.</summary>
     public static string TargetOf(ZigInvocation inv) => inv.Args.First(a => a.StartsWith("--target=", StringComparison.Ordinal));
+
+    // ld64 links a library once however often it is named; zig would write a load command per
+    // mention, and dyld rejects a binary with duplicate ones. The workload names some frameworks
+    // both as "-framework X" and "-Wl,-framework,X".
+    static List<string> WithoutDuplicateLibraries(List<string> args)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+        for (int i = 0; i < args.Count; i++)
+        {
+            string a = args[i];
+            if (a is "-framework" or "-weak_framework" && i + 1 < args.Count)
+            {
+                if (seen.Add("framework:" + args[i + 1]))
+                {
+                    result.Add(a);
+                    result.Add(args[i + 1]);
+                }
+                i++;
+                continue;
+            }
+            if (a.StartsWith("-Wl,-framework,", StringComparison.Ordinal) || a.StartsWith("-Wl,-weak_framework,", StringComparison.Ordinal))
+            {
+                var parts = a.Split(',');
+                if (parts.Length == 3 && seen.Add("framework:" + parts[2]))
+                {
+                    result.Add(parts[1]);
+                    result.Add(parts[2]);
+                }
+                continue;
+            }
+            if (a.StartsWith("-l", StringComparison.Ordinal) && a.Length > 2 && !seen.Add("lib:" + a[2..]))
+                continue;
+            result.Add(a);
+        }
+        return result;
+    }
+
+    // Drops -L/-F search paths (either "-Ldir" or "-L dir") inside an Xcode installation.
+    static List<string> WithoutSearchPathsUnder(List<string> args, string? xcodeDir)
+    {
+        if (string.IsNullOrEmpty(xcodeDir))
+            return args;
+        string prefix = xcodeDir.TrimEnd('/', '\\');
+        bool Inside(string path) => path.StartsWith(prefix + "/", StringComparison.Ordinal) || path == prefix;
+        var result = new List<string>();
+        for (int i = 0; i < args.Count; i++)
+        {
+            string a = args[i];
+            if (a is "-L" or "-F" && i + 1 < args.Count && Inside(args[i + 1]))
+            {
+                i++;
+                continue;
+            }
+            if ((a.StartsWith("-L", StringComparison.Ordinal) || a.StartsWith("-F", StringComparison.Ordinal)) && a.Length > 2 && Inside(a[2..]))
+                continue;
+            result.Add(a);
+        }
+        return result;
+    }
 
     static string XlinkerValue(IReadOnlyList<string> args, ref int i)
     {

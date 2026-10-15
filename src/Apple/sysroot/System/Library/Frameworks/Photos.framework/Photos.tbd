@@ -1,0 +1,30 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Photos.framework/Photos'
+current-version: 912.0.234
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _PHContentEditingInputCancelledKey, _PHContentEditingInputErrorKey,
+                        _PHContentEditingInputResultIsInCloudKey, _PHImageCancelledKey,
+                        _PHImageErrorKey, _PHImageManagerMaximumSize, _PHImageResultIsDegradedKey,
+                        _PHImageResultIsInCloudKey, _PHImageResultRequestIDKey,
+                        _PHLivePhotoInfoCancelledKey, _PHLivePhotoInfoErrorKey,
+                        _PHLivePhotoInfoIsDegradedKey, _PHLivePhotoShouldRenderAtPlaybackTime,
+                        _PHLocalIdentifiersErrorKey, _PHPhotosErrorDomain ]
+    objc-classes:     [ PHAdjustmentData, PHAsset, PHAssetChangeRequest, PHAssetCollection,
+                        PHAssetCollectionChangeRequest, PHAssetCreationRequest,
+                        PHAssetExtendedMetadata, PHAssetResource, PHAssetResourceCreationOptions,
+                        PHAssetResourceManager, PHAssetResourceRequestOptions,
+                        PHAssetResourceUploadJob, PHAssetResourceUploadJobChangeRequest,
+                        PHAssetResourceUploadJobOptions, PHCachingImageManager, PHChange,
+                        PHChangeRequest, PHCloudIdentifier, PHCloudIdentifierMapping, PHCollection,
+                        PHCollectionList, PHCollectionListChangeRequest, PHContentEditingInput,
+                        PHContentEditingInputRequestOptions, PHContentEditingOutput, PHFetchOptions,
+                        PHFetchResult, PHFetchResultChangeDetails, PHImageManager,
+                        PHImageRequestOptions, PHLivePhoto, PHLivePhotoEditingContext,
+                        PHLivePhotoRequestOptions, PHLocalIdentifierMapping, PHObject,
+                        PHObjectChangeDetails, PHObjectPlaceholder, PHPersistentChange,
+                        PHPersistentChangeFetchResult, PHPersistentChangeToken,
+                        PHPersistentObjectChangeDetails, PHPhotoLibrary, PHVideoRequestOptions ]
+...

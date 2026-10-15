@@ -108,6 +108,9 @@
            ILCompiler targets' own xcrun SDK-path probe doesn't; set it
            process-wide, the way xcode-select would. -->
       <_AotAnywhereAppleEnv Include="DEVELOPER_DIR" Value="$(AotAnywhereXcodeDir)/Contents/Developer" />
+      <!-- AotAnywhereAppleLinkStubs=true: link against the package's own .tbd stubs
+           (build/sysroot, from eng/generate-apple-ios-sysroot.cs) instead of the SDK's. -->
+      <_AotAnywhereAppleEnv Include="AOTANYWHERE_APPLE_SYSROOT" Value="$(MSBuildThisFileDirectory)sysroot" Condition="'$(AotAnywhereAppleLinkStubs)' == 'true'" />
     </ItemGroup>
     <AotAnywhereSetEnvironment Variables="@(_AotAnywhereAppleEnv)" PrependToPath="$(_AotAnywhereAppleBin)" />
 

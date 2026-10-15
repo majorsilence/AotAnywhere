@@ -1,0 +1,6 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/_LinkPresentation_AppIntents.framework/_LinkPresentation_AppIntents'
+current-version: 313
+...

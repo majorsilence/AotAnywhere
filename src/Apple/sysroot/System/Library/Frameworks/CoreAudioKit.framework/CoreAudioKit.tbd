@@ -1,0 +1,10 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreAudioKit.framework/CoreAudioKit'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    objc-classes:     [ AUAudioUnitViewConfiguration, AUGenericViewController, AUViewController,
+                        CABTMIDICentralViewController, CABTMIDILocalPeripheralViewController,
+                        CAInterAppAudioSwitcherView, CAInterAppAudioTransportView ]
+...

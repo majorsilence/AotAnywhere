@@ -1,0 +1,28 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreML.framework/CoreML'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _MLAllComputeDevices, _MLFeatureValueImageOptionCropAndScale,
+                        _MLFeatureValueImageOptionCropRect, _MLModelAuthorKey,
+                        _MLModelCreatorDefinedKey, _MLModelDescriptionKey, _MLModelErrorDomain,
+                        _MLModelLicenseKey, _MLModelVersionStringKey ]
+    objc-classes:     [ MLArrayBatchProvider, MLCPUComputeDevice, MLComputePlan, MLComputePlanCost,
+                        MLComputePlanDeviceUsage, MLDictionaryConstraint,
+                        MLDictionaryFeatureProvider, MLFeatureDescription, MLFeatureValue,
+                        MLGPUComputeDevice, MLImageConstraint, MLImageSize, MLImageSizeConstraint,
+                        MLKey, MLMetricKey, MLModel, MLModelAsset, MLModelConfiguration,
+                        MLModelDescription, MLModelStructure, MLModelStructureNeuralNetwork,
+                        MLModelStructureNeuralNetworkLayer, MLModelStructurePipeline,
+                        MLModelStructureProgram, MLModelStructureProgramArgument,
+                        MLModelStructureProgramBinding, MLModelStructureProgramBlock,
+                        MLModelStructureProgramFunction, MLModelStructureProgramNamedValueType,
+                        MLModelStructureProgramOperation, MLModelStructureProgramValue,
+                        MLModelStructureProgramValueType, MLMultiArray, MLMultiArrayConstraint,
+                        MLMultiArrayShapeConstraint, MLNeuralEngineComputeDevice,
+                        MLNumericConstraint, MLOptimizationHints, MLParameterDescription,
+                        MLParameterKey, MLPredictionOptions, MLSequence, MLSequenceConstraint,
+                        MLState, MLStateConstraint, MLTask, MLUpdateContext,
+                        MLUpdateProgressHandlers, MLUpdateTask ]
+...

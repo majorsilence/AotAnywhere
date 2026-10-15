@@ -72,10 +72,46 @@ public class ClangToZigTests
         await Assert.That(inv.Args.Count(a => a == $"{Sdk}/usr/lib/libc++.tbd")).IsEqualTo(1);
         await Assert.That(inv.Args).Contains($"-L{Sdk}/usr/lib");
         await Assert.That(inv.Args).Contains("-lSystem");
-        // -lswiftCore pulls the explicitly-named overlays (zig ignores LC_LINKER_OPTION).
-        await Assert.That(inv.Args).Contains("-lswiftFoundation");
-        await Assert.That(inv.Args).Contains("-Wl,-dead_strip_dylibs");
-        await Assert.That(inv.Args).Contains("-Wl,-framework,CryptoKit");
+        // Swift overlays come from the autolink pass, and every named library stays linked (as with ld64).
+        await Assert.That(inv.Args).Contains($"-L{Sdk}/usr/lib/swift");
+        await Assert.That(inv.Args).DoesNotContain("-Wl,-dead_strip_dylibs");
+        // Named both ways by the workload; linked once (dyld rejects duplicate load commands).
+        await Assert.That(inv.Args).DoesNotContain("-Wl,-framework,CryptoKit");
+        await Assert.That(inv.Args.Count(a => a == "CryptoKit")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task LinkNamesEachLibraryOnce()
+    {
+        var inv = ClangToZig.Translate("clang",
+        [
+            "-miphoneos-version-min=15.0", "-isysroot", Sdk, "-arch", "arm64", "a.o",
+            "-framework", "Security", "-lz", "-framework", "Security", "-Wl,-framework,Security", "-lz", "-o", "a",
+        ]);
+
+        await Assert.That(inv.Args.Count(a => a == "Security")).IsEqualTo(1);
+        await Assert.That(inv.Args.Count(a => a == "-lz")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task StubLinkUsesTheSysrootAndDropsXcodeSearchPaths()
+    {
+        const string xcode = "/X/Xcode.app/Contents/Developer";
+        var inv = ClangToZig.Translate("clang++",
+        [
+            "-miphoneos-version-min=15.0", "-isysroot", Sdk, "-arch", "arm64", "a.o", "-lc++",
+            $"-L{xcode}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphoneos/", "-L", $"{xcode}/Platforms/x", "-Lobj/native",
+            "-F", "obj/xcframework", "-o", "a",
+        ], stubs: new LinkStubs("/pkg/sysroot", xcode, "/zig/include"));
+
+        await Assert.That(inv.Args.Any(a => a.Contains(xcode))).IsFalse();
+        await Assert.That(inv.Args.Any(a => a.Contains(Sdk))).IsFalse();
+        await Assert.That(inv.Args).Contains("-Lobj/native");
+        await Assert.That(inv.Args).Contains("obj/xcframework");
+        await Assert.That(inv.Args).Contains("/pkg/sysroot/usr/lib/libc++.tbd");
+        await Assert.That(inv.Args).Contains("-F/pkg/sysroot/System/Library/Frameworks");
+        await Assert.That(inv.ZigLibc!).Contains("crt_dir=/pkg/sysroot/usr/lib");
+        await Assert.That(inv.ZigLibc!).Contains("darwin_sdk_dir=/pkg/sysroot");
     }
 
     [Test]

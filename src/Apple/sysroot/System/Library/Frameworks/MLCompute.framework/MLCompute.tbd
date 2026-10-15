@@ -1,0 +1,32 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/MLCompute.framework/MLCompute'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _MLCActivationTypeDebugDescription, _MLCArithmeticOperationDebugDescription,
+                        _MLCComparisonOperationDebugDescription,
+                        _MLCConvolutionTypeDebugDescription,
+                        _MLCGradientClippingTypeDebugDescription,
+                        _MLCLSTMResultModeDebugDescription, _MLCLossTypeDebugDescription,
+                        _MLCPaddingPolicyDebugDescription, _MLCPaddingTypeDebugDescription,
+                        _MLCPoolingTypeDebugDescription, _MLCReductionTypeDebugDescription,
+                        _MLCSampleModeDebugDescription, _MLCSoftmaxOperationDebugDescription ]
+    objc-classes:     [ MLCActivationDescriptor, MLCActivationLayer, MLCAdamOptimizer,
+                        MLCAdamWOptimizer, MLCArithmeticLayer, MLCBatchNormalizationLayer,
+                        MLCComparisonLayer, MLCConcatenationLayer, MLCConvolutionDescriptor,
+                        MLCConvolutionLayer, MLCDevice, MLCDropoutLayer, MLCEmbeddingDescriptor,
+                        MLCEmbeddingLayer, MLCFullyConnectedLayer, MLCGatherLayer,
+                        MLCGramMatrixLayer, MLCGraph, MLCGroupNormalizationLayer, MLCInferenceGraph,
+                        MLCInstanceNormalizationLayer, MLCLSTMDescriptor, MLCLSTMLayer, MLCLayer,
+                        MLCLayerNormalizationLayer, MLCLossDescriptor, MLCLossLayer,
+                        MLCMatMulDescriptor, MLCMatMulLayer, MLCMultiheadAttentionDescriptor,
+                        MLCMultiheadAttentionLayer, MLCOptimizer, MLCOptimizerDescriptor,
+                        MLCPaddingLayer, MLCPlatform, MLCPoolingDescriptor, MLCPoolingLayer,
+                        MLCRMSPropOptimizer, MLCReductionLayer, MLCReshapeLayer, MLCSGDOptimizer,
+                        MLCScatterLayer, MLCSelectionLayer, MLCSliceLayer, MLCSoftmaxLayer,
+                        MLCSplitLayer, MLCTensor, MLCTensorData, MLCTensorDescriptor,
+                        MLCTensorOptimizerDeviceData, MLCTensorParameter, MLCTrainingGraph,
+                        MLCTransposeLayer, MLCUpsampleLayer, MLCYOLOLossDescriptor,
+                        MLCYOLOLossLayer ]
+...

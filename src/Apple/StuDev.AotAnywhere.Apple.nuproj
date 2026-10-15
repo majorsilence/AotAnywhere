@@ -42,6 +42,11 @@
       <Pack>true</Pack>
       <PackagePath>Sdk</PackagePath>
     </None>
+    <!-- The iOS linker stubs (eng/generate-apple-ios-sysroot.cs), next to the targets. -->
+    <None Include="sysroot/**/*.tbd;sysroot/SDKSettings.json">
+      <Pack>true</Pack>
+      <PackagePath>build/sysroot/%(RecursiveDir)</PackagePath>
+    </None>
     <None Include="../../README.md">
       <Pack>true</Pack>
       <PackagePath>/</PackagePath>

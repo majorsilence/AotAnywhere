@@ -1,0 +1,16 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/ShazamKit.framework/ShazamKit'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _SHErrorDomain, _SHMediaItemAppleMusicID, _SHMediaItemAppleMusicURL,
+                        _SHMediaItemArtist, _SHMediaItemArtworkURL, _SHMediaItemConfidence,
+                        _SHMediaItemCreationDate, _SHMediaItemExplicitContent,
+                        _SHMediaItemFrequencySkew, _SHMediaItemFrequencySkewRanges,
+                        _SHMediaItemGenres, _SHMediaItemISRC, _SHMediaItemMatchOffset,
+                        _SHMediaItemShazamID, _SHMediaItemSubtitle, _SHMediaItemTimeRanges,
+                        _SHMediaItemTitle, _SHMediaItemVideoURL, _SHMediaItemWebURL ]
+    objc-classes:     [ SHCatalog, SHCustomCatalog, SHMatch, SHMatchedMediaItem, SHMediaItem,
+                        SHMediaLibrary, SHRange, SHSession, SHSignature, SHSignatureGenerator ]
+...

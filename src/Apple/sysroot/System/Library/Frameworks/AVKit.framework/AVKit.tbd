@@ -1,0 +1,22 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/AVKit.framework/AVKit'
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _AVKitErrorDomain ]
+    objc-classes:     [ AVCaptureEvent, AVCaptureEventInteraction, AVCaptureEventSound,
+                        AVInputPickerInteraction, AVInterstitialTimeRange,
+                        AVLegibleMediaOptionsMenuController, AVPictureInPictureController,
+                        AVPictureInPictureControllerContentSource,
+                        AVPictureInPictureVideoCallViewController, AVPlaybackSpeed,
+                        AVPlaybackUserInterfaceContentArtwork,
+                        AVPlaybackUserInterfaceContentMetadata,
+                        AVPlaybackUserInterfaceContentMetadataTemplate,
+                        AVPlaybackUserInterfaceContentURLArtwork,
+                        AVPlaybackUserInterfaceContentVideoProperties,
+                        AVPlaybackUserInterfaceMediaSelectionOption,
+                        AVPlaybackUserInterfacePlaybackPosition,
+                        AVPlaybackUserInterfaceTimelineSegment, AVPlayerViewController,
+                        AVRoutePickerView ]
+...
