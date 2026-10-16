@@ -1,4 +1,5 @@
 using AotAnywhere.Tasks;
+using TUnit.Core.Enums;
 
 namespace AotAnywhere.MSBuild.Tests;
 
@@ -7,7 +8,10 @@ namespace AotAnywhere.MSBuild.Tests;
 // unpinned, zig cc roots its local cache at `.zig-cache` under the nearest
 // ancestor directory holding a build.zig, so the glue object could surface in
 // the printed lld-link line at a spaced path the aliasing never predicted
-// (issue #67). Pure logic; the environment is injected.
+// (issue #67). Pure logic; the environment is injected. Like the aliasing, this
+// runs only on non-Windows hosts (XDG/HOME resolution), so the tests are skipped
+// on a Windows host.
+[ExcludeOn(OS.Windows)]
 public class ZigCacheDirsTests
 {
     static Func<string, string?> Env(params (string Name, string Value)[] vars) =>
