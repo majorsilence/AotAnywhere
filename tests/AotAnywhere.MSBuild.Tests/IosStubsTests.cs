@@ -75,8 +75,9 @@ public class IosStubsTests
         await Assert.That(Attribute("_$sSo8NSObjectC10Foundation27_KeyValueCodingAndObservingACWP")).IsEqualTo("/usr/lib/swift/libswiftFoundation.dylib");
         // ...Swift API that lives in the framework itself...
         await Assert.That(Attribute("_$s8StoreKit03AppA0O13requestReview")).IsEqualTo("/System/Library/Frameworks/StoreKit.framework/StoreKit");
-        // ...a module that moved (and gets a $ld$previous back to its old library)...
-        await Assert.That(Attribute("_$s12CoreGraphics7CGFloatVMn")).IsEqualTo("/usr/lib/swift/libswiftCoreFoundation.dylib");
+        // ...a historical Darwin overlay, even when its code has since moved (CGFloat now lives in the
+        // CoreFoundation overlay; libswiftCoreGraphics still provides it, as Apple's own links show)...
+        await Assert.That(Attribute("_$s12CoreGraphics7CGFloatVMn")).IsEqualTo("/usr/lib/swift/libswiftCoreGraphics.dylib");
         // ...and the standard library.
         await Assert.That(Attribute("_$sSHMp")).IsEqualTo("/usr/lib/swift/libswiftCore.dylib");
         await Assert.That(Attribute("_$s8RawValueSYTl")).IsEqualTo("/usr/lib/swift/libswiftCore.dylib");

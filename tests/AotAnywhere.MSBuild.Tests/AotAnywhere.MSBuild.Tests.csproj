@@ -20,11 +20,6 @@
     <ProjectReference Include="../../src/Apple/tools/AotAnywhere.AppleTools/AotAnywhere.AppleTools.csproj" />
   </ItemGroup>
 
-  <!-- Synthetic .xip / .xz archives (fixtures/xip/make-fixtures.py) for the Xcode importer tests. -->
-  <ItemGroup>
-    <None Include="fixtures/**" Exclude="fixtures/**/*.py" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="TUnit" Version="1.73.0" />
     <PackageReference Include="Microsoft.Build.Locator" Version="1.11.2" />

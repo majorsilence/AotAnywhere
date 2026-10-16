@@ -17,9 +17,10 @@ namespace AotAnywhere.AppleTools;
 ///   time - Mono resolves each P/Invoke and field with <c>dlopen(path)</c> + <c>dlsym</c>.</item>
 /// <item>libSystem: zig's list (MIT). libobjc, libc++, zlib, ICU: their open-source projects' API
 ///   names and install names.</item>
-/// <item>Swift: the module encoded in each mangled name, mapped to the overlay library or framework
-///   the inputs' own objects autolink (<c>-lswiftX</c> / <c>-framework X</c>), plus the moves listed in
-///   <see cref="SwiftModuleMoves"/>.</item>
+/// <item>Swift: the module encoded in each mangled name - its overlay library if it is one of
+///   Swift's historical Darwin overlays (<see cref="HistoricalOverlays"/>), else the overlay or framework
+///   the inputs' own objects autolink (<c>-lswiftX</c> / <c>-framework X</c>); and the library splits in
+///   <see cref="LibraryMoves"/>.</item>
 /// <item>Objective-C classes: listed under the framework their binding namespace names, as a hint
 ///   only - which framework an app using the class must load. Microsoft.iOS never names a class's
 ///   library (it finds classes with <c>objc_getClass</c>), and classes do move between frameworks
@@ -59,15 +60,31 @@ public static class IosStubs
     static readonly string[] LibSystemAliases = ["libc", "libm", "libdl", "libpthread", "libinfo", "libdbm", "libpoll", "libproc", "librpcsvc"];
 
     /// <summary>
-    /// Swift modules whose code moved into another library, with the library it was in before and
-    /// the OS version it moved in. From the <c>@_originallyDefinedIn(module:, iOS x)</c> attributes in
-    /// Swift's open-source overlays - the compiler turns exactly those into the <c>$ld$previous$</c>
-    /// directives this writes, so an app targeting an older OS binds to the old library.
+    /// The Darwin overlay modules of Swift 5.1 - the first release whose Swift libraries ship in
+    /// iOS (12.2) - as listed in Swift's open-source tree (swift-5.1-RELEASE stdlib/public/Darwin,
+    /// plus Darwin from stdlib/public/Platform). Each is <c>/usr/lib/swift/libswift&lt;Module&gt;.dylib</c>
+    /// on every iOS version since, so a symbol of one of these modules binds to it: where an
+    /// overlay's code later moved (CGFloat into the CoreFoundation overlay, much of Foundation's
+    /// into Foundation itself), the old library still provides it for the apps built against it.
     /// </summary>
-    public static readonly (string Module, string Library, string PreviousLibrary, string MovedIn)[] SwiftModuleMoves =
+    public static readonly IReadOnlySet<string> HistoricalOverlays = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ARKit", "AVFoundation", "Accelerate", "AppKit", "AssetsLibrary", "CallKit", "CloudKit", "Compression", "Contacts",
+        "CoreAudio", "CoreData", "CoreFoundation", "CoreGraphics", "CoreImage", "CoreLocation", "CoreMedia", "CryptoTokenKit",
+        "Dispatch", "Foundation", "GLKit", "GameplayKit", "HomeKit", "IOKit", "Intents", "MapKit", "MediaPlayer", "Metal",
+        "MetalKit", "ModelIO", "NaturalLanguage", "Network", "ObjectiveC", "OpenCL", "Photos", "QuartzCore", "SafariServices",
+        "SceneKit", "SpriteKit", "UIKit", "Vision", "WatchKit", "XCTest", "XPC", "os", "simd", "Darwin",
+    };
+
+    /// <summary>
+    /// Libraries split out of another one, with the OS range in which apps must bind to the old
+    /// library instead - written as the library-wide <c>$ld$previous$</c> directives Swift's own
+    /// build adds (swift stdlib/public/ClangOverlays/linker-support/magic-symbols-for-install-name.c:
+    /// _Builtin_float was part of libswiftDarwin before iOS 18).
+    /// </summary>
+    public static readonly (string Library, string PreviousLibrary, string Start, string End)[] LibraryMoves =
     [
-        // CGFloat & co. moved from the CoreGraphics overlay into the CoreFoundation one.
-        ("CoreGraphics", "/usr/lib/swift/libswiftCoreFoundation.dylib", "/usr/lib/swift/libswiftCoreGraphics.dylib", "16.0"),
+        ("/usr/lib/swift/libswift_Builtin_float.dylib", "/usr/lib/swift/libswiftDarwin.dylib", "12.2", "18.0"),
     ];
 
     // Documented C API prefixes of the frameworks the runtime packs' native code calls directly.
@@ -150,24 +167,17 @@ public static class IosStubs
             Add(assigned, library, ListKey(symbol), symbol);
         }
 
-        foreach (var (module, library, previous, movedIn) in SwiftModuleMoves)
-            if (assigned.TryGetValue(library, out var kinds) && kinds.TryGetValue("symbols", out var symbols))
-                foreach (var symbol in symbols.Where(s => s.StartsWith($"_$s{module.Length}{module}", StringComparison.Ordinal)).ToList())
-                    // From iOS 12.2, the first release with the Swift libraries in the OS (ABI stability).
-                    foreach (int platform in new[] { 2 /* iOS */, 7 /* iOS simulator */ })
-                        symbols.Add($"$ld$previous${previous}$${platform}$12.2${movedIn}${symbol}$");
+        foreach (var (library, previous, start, end) in LibraryMoves)
+            foreach (int platform in new[] { 2 /* iOS */, 7 /* iOS simulator */ })
+                Add(assigned, library, "symbols", $"$ld$previous${previous}$${platform}${start}${end}$$");
 
         // Every library a link line may name gets a stub, even without symbols: the workload
         // passes -framework for each binding namespace an app uses, and -l for /usr/lib ones.
         foreach (var library in context.Frameworks.Concat(UsrLib.Values)
                      .Concat(context.SwiftOverlays.Select(o => $"/usr/lib/swift/lib{o}.dylib"))
+                     .Concat(HistoricalOverlays.Select(m => $"/usr/lib/swift/libswift{m}.dylib"))
                      .Concat(context.AutolinkFrameworks.Select(FrameworkPath)))
             assigned.TryAdd(library, new(StringComparer.Ordinal));
-        foreach (var (_, library, previous, _) in SwiftModuleMoves)
-        {
-            assigned.TryAdd(library, new(StringComparer.Ordinal));
-            assigned.TryAdd(previous, new(StringComparer.Ordinal));
-        }
 
         foreach (var dir in new[] { "System", "usr" })
             if (Directory.Exists(Path.Combine(output, dir)))
@@ -258,9 +268,8 @@ public static class IosStubs
             string module = m.Groups[2].Value[..n];
             if (module == "main")
                 return null; // the app's own Swift code
-            foreach (var move in SwiftModuleMoves)
-                if (move.Module == module)
-                    return move.Library;
+            if (HistoricalOverlays.Contains(module))
+                return $"/usr/lib/swift/libswift{module}.dylib";
             if (module == "_Concurrency")
                 return "/usr/lib/swift/libswift_Concurrency.dylib";
             if (context.SwiftOverlays.Contains("swift" + module))

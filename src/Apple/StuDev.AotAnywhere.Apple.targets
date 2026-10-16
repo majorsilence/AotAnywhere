@@ -26,14 +26,10 @@
     <_AotAnywhereAppleActive Condition="'$(TargetPlatformIdentifier)' == 'iOS' and (!$([MSBuild]::IsOSPlatform('OSX')) or '$(AotAnywhereAppleForce)' == 'true')">true</_AotAnywhereAppleActive>
 
     <!-- The Xcode the workload is pointed at:
-         - AotAnywhereXcodeDir, if set (any Xcode-shaped folder, including a real Xcode.app);
-         - else an Xcode imported with AotAnywhereImportXcode, if there is one;
+         - AotAnywhereXcodeDir, if set (an installed Xcode.app, on a Mac);
          - else (the default) a synthetic one generated into obj/: version plists only, from the
            workload's own RecommendedXcodeVersion and SDK version. A synthetic Xcode has no SDK
            headers or libraries, so generated headers and the package's linker stubs are used. -->
-    <AotAnywhereHome Condition="'$(AotAnywhereHome)' == ''">$([MSBuild]::EnsureTrailingSlash('$([System.Environment]::GetFolderPath(SpecialFolder.UserProfile))')).aotanywhere/</AotAnywhereHome>
-    <_AotAnywhereImportedXcodeDir>$(AotAnywhereHome)xcode/Xcode.app</_AotAnywhereImportedXcodeDir>
-    <AotAnywhereXcodeDir Condition="'$(AotAnywhereXcodeDir)' == '' and Exists('$(_AotAnywhereImportedXcodeDir)/Contents/version.plist')">$(_AotAnywhereImportedXcodeDir)</AotAnywhereXcodeDir>
     <_AotAnywhereSyntheticXcode Condition="'$(AotAnywhereXcodeDir)' == ''">true</_AotAnywhereSyntheticXcode>
     <AotAnywhereXcodeDir Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'Xcode.app').TrimEnd('/').TrimEnd(''))</AotAnywhereXcodeDir>
     <_AotAnywhereSyntheticSdkVersion>$(_XamarinTargetPlatformVersionExecutable)</_AotAnywhereSyntheticSdkVersion>
@@ -78,7 +74,7 @@
 
   <!-- Tool names the workload (and the ILCompiler targets' probes) launch. -->
   <ItemGroup Condition="'$(_AotAnywhereAppleActive)' == 'true'">
-    <_AotAnywhereAppleTool Include="xcrun;clang;clang++;codesign;install_name_tool;strip;dsymutil;mdimport" />
+    <_AotAnywhereAppleTool Include="xcrun;clang;clang++;codesign;install_name_tool;strip;dsymutil;mdimport;ditto" />
   </ItemGroup>
 
   <Target Name="AotAnywhereAppleSetup"
@@ -108,6 +104,8 @@
       <XcodeLocation>$(AotAnywhereXcodeDir)</XcodeLocation>
       <!-- Codesign launches $(CodesignPath)/codesign rather than going through xcrun. -->
       <CodesignPath>$(_AotAnywhereAppleBin)</CodesignPath>
+      <!-- The Ditto task (embedding frameworks, .ipa payloads) runs $(DittoPath) instead of /usr/bin/ditto. -->
+      <DittoPath>$(_AotAnywhereAppleBin)/ditto</DittoPath>
       <!-- dSYM bundles need Apple's dsymutil. -->
       <NoDSymUtil>true</NoDSymUtil>
     </PropertyGroup>
@@ -169,26 +167,6 @@
       <_AotAnywhereAppleShimEnv Include="AOTANYWHERE_OBJC_SHIMS" Value="$(_AotAnywhereObjCShimDir)" />
     </ItemGroup>
     <AotAnywhereSetEnvironment Variables="@(_AotAnywhereAppleShimEnv)" PrependToPath="$(_AotAnywhereAppleBin)" />
-  </Target>
-
-  <!-- One-time setup: extract what iOS builds need from an Xcode .xip downloaded from
-       Apple (https://developer.apple.com/download/all/?q=Xcode - Apple ID required, so it
-       cannot be fetched automatically), or from an installed Xcode.app:
-
-         dotnet msbuild -t:AotAnywhereImportXcode -p:XcodeXip=/path/to/Xcode_27.xip
-         dotnet msbuild -t:AotAnywhereImportXcode -p:XcodeApp=/Applications/Xcode.app
-
-       The result (a few hundred MB: SDK headers, .tbd stubs, version plists) lands in
-       $(AotAnywhereXcodeDir), where builds pick it up. -->
-  <Target Name="AotAnywhereImportXcode">
-    <Error Condition="('$(XcodeXip)' == '') == ('$(XcodeApp)' == '')"
-           Text="AotAnywhere: pass exactly one of XcodeXip (an Xcode .xip downloaded from https://developer.apple.com/download/all/?q=Xcode) or XcodeApp (an installed Xcode.app)." />
-    <Error Condition="!Exists('$(_AotAnywhereAppleDll)')"
-           Text="AotAnywhere: AotAnywhere.AppleTools.dll was not found in '$(AotAnywhereAppleToolsDir)'. For a source build, run `dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release` first." />
-    <Exec Condition="'$(XcodeXip)' != ''"
-          Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; import-xcode --xip &quot;$(XcodeXip)&quot; --out &quot;$(AotAnywhereXcodeDir)&quot;" />
-    <Exec Condition="'$(XcodeApp)' != ''"
-          Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; import-xcode --from &quot;$(XcodeApp)&quot; --out &quot;$(AotAnywhereXcodeDir)&quot;" />
   </Target>
 
 </Project>

@@ -166,6 +166,28 @@ public class AppleSigningTests
     }
 
     [Test]
+    public async Task NestedFrameworksAreSealedAsResourcesLikeCodesignDoes()
+    {
+        // As codesign does for iOS apps (checked against its output for Avalonia's embedded
+        // SkiaSharp/HarfBuzz frameworks): every file of a nested, already-signed framework is a
+        // plain resource in the app's seal.
+        var app = Path.Combine(Path.GetTempPath(), "aotanywhere-nested-" + Guid.NewGuid().ToString("N"), "App.app");
+        var fw = Path.Combine(app, "Frameworks", "libSkia.framework");
+        Directory.CreateDirectory(Path.Combine(fw, "_CodeSignature"));
+        File.WriteAllText(Path.Combine(app, "Info.plist"), "");
+        File.WriteAllBytes(Path.Combine(fw, "libSkia"), [1, 2, 3]);
+        File.WriteAllBytes(Path.Combine(fw, "Info.plist"), [4]);
+        File.WriteAllBytes(Path.Combine(fw, "_CodeSignature", "CodeResources"), [5]);
+
+        var seal = Plist.ReadDictionary(BundleSigner.CodeResources(app, "App"));
+        var files2 = (Dictionary<string, object>)seal["files2"];
+
+        await Assert.That(files2.Keys).Contains("Frameworks/libSkia.framework/libSkia");
+        await Assert.That(files2.Keys).Contains("Frameworks/libSkia.framework/_CodeSignature/CodeResources");
+        await Assert.That(((Dictionary<string, object>)seal["files"]).Keys).Contains("Frameworks/libSkia.framework/libSkia");
+    }
+
+    [Test]
     public async Task BinaryWithoutCodeSignatureCommandIsRejected()
     {
         var data = new byte[64];

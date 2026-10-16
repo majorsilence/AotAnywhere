@@ -7,7 +7,7 @@ namespace AotAnywhere.AppleTools;
 /// Signs an iOS bundle (.app / .appex) the way codesign does: seal every resource into
 /// <c>_CodeSignature/CodeResources</c>, then sign the main executable with the bundle ID as its
 /// identifier and the Info.plist and CodeResources hashes in its special slots. Nested code
-/// (the loose dylibs the workload bundles) is signed beforehand by the workload's own per-file
+/// (the loose dylibs and frameworks the workload bundles) is signed beforehand by the workload's own per-file
 /// codesign calls and is sealed here as a plain resource, as codesign does for iOS bundles.
 /// </summary>
 public static class BundleSigner
@@ -70,8 +70,10 @@ public static class BundleSigner
                 continue;
             if (new FileInfo(full).LinkTarget is not null)
                 throw new AppleToolException($"AotAnywhere: symbolic links in bundles are not supported yet ('{rel}').");
-            if (rel.Split('/').SkipLast(1).Any(d => d.EndsWith(".framework", StringComparison.Ordinal) || d.EndsWith(".appex", StringComparison.Ordinal)))
-                throw new AppleToolException($"AotAnywhere: bundles with nested frameworks or app extensions are not supported off-Mac yet ('{rel}').");
+            // Nested frameworks (signed beforehand, by the workload's own per-framework codesign
+            // calls) are sealed file by file as resources, as codesign does for iOS bundles.
+            if (rel.Split('/').SkipLast(1).Any(d => d.EndsWith(".appex", StringComparison.Ordinal)))
+                throw new AppleToolException($"AotAnywhere: bundles with app extensions are not supported off-Mac yet ('{rel}').");
 
             byte[] content = File.ReadAllBytes(full);
 

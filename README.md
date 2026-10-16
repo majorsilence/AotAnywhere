@@ -93,7 +93,10 @@ handles that itself, no LLVM install needed).
   supported way to produce App Store or TestFlight builds: submissions are
   expected to be built with Apple's Xcode, and building, signing and uploading
   apps for distribution is out of scope. Use a Mac with Xcode (or a hosted macOS
-  build service) for anything you ship.
+  build service) for anything you ship. Storyboards and XIBs (views, image
+  views, labels, constraints) and asset catalogs (app icons, PNG image sets) are
+  compiled by built-in replacements for Apple's `ibtool` and `actool`. A project
+  that uses anything else those tools handle stops with an error naming the item.
 
 - **Windows output skips some MSVC hardening.** Control Flow Guard and CET
   markers (`/CETCOMPAT`) are not carried over. For maximum-hardening release

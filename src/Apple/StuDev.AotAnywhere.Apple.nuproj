@@ -11,7 +11,7 @@
     <Version Condition="'$(Version)' == ''">42.42.42-dev</Version>
     <Authors>Stuart Lang</Authors>
     <Company>Stuart Lang</Company>
-    <Description>Build net*-ios Native AOT apps on Windows, Linux and macOS without Xcode. Replaces the Xcode tools the iOS workload calls with open-source C# implementations and Zig, using the iOS SDK imported from an Xcode .xip you download from Apple.</Description>
+    <Description>Build net*-ios Native AOT apps on Windows, Linux and macOS without Xcode. Replaces the Xcode tools the iOS workload calls with open-source C# implementations and Zig; needs no Apple SDK. For local development builds, not App Store distribution.</Description>
     <PackageProjectUrl>https://github.com/slang25/AotAnywhere</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>

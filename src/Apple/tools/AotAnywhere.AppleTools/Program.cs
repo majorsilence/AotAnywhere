@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using AotAnywhere.AppleTools;
-using AotAnywhere.AppleTools.Xip;
 
 // Usage: AotAnywhere.AppleTools <tool> [args...]
 // The generated PATH wrappers (xcrun, clang, clang++, codesign, ...) pass their own name as <tool>.
@@ -26,14 +25,18 @@ static class Tools
         "codesign" => Codesign(args),
         "strip" => Strip(args),
         "dsymutil" => DSymUtil(args),
-        "import-xcode" => ImportXcode(args),
         "objc-shims" => ObjCShimsTool(args),
         "synthetic-xcode" => SyntheticXcodeTool(args),
+        "ditto" => RunDitto(args),
+        "ibtool" => IbTool(args),
+        "actool" => AcTool(args),
+        "car-dump" => Print(CarWriter.Dump(File.ReadAllBytes(args[0]))),
+        "nib-dump" => Print(NibArchive.Read(File.ReadAllBytes(args[0])).Dump()),
         // Spotlight indexing of the build output; meaningless off-Mac.
         "mdimport" => 0,
         // On a Mac with Xcode (AotAnywhereAppleForce), defer anything not reimplemented here.
         _ when OperatingSystem.IsMacOS() && File.Exists(AppleXcrun) => Exec(AppleXcrun, [tool, .. args], AppleToolEnvironment()),
-        _ => throw new AppleToolException($"AotAnywhere: the Xcode tool '{tool}' is not available off-Mac. If the project uses a feature that needs it (storyboards, asset catalogs, Metal shaders, Core ML models, ...), it can only be built on a Mac with Xcode."),
+        _ => throw new AppleToolException($"AotAnywhere: the Xcode tool '{tool}' is not available off-Mac. If the project uses a feature that needs it (Metal shaders, Core ML models, SceneKit assets, ...), it can only be built on a Mac with Xcode."),
     };
 
     const string AppleXcrun = "/usr/bin/xcrun";
@@ -322,35 +325,127 @@ static class Tools
         return 0;
     }
 
-    // import-xcode (--xip <Xcode.xip> | --from <Xcode.app>) --out <dir>
-    static int ImportXcode(List<string> args)
+    // ibtool [--errors --warnings --notices --output-format xml1 ...] (--compilation-directory <dir> | --compile <path>) <input>...
+    // Prints the result plist the workload's IBTool task parses.
+    static int IbTool(List<string> args)
     {
-        string? xip = null, from = null, output = null;
+        string? directory = null, compileTo = null;
+        var inputs = new List<string>();
         for (int i = 0; i < args.Count; i++)
         {
             switch (args[i])
             {
-                case "--xip": xip = NextArg(args, ref i, "--xip"); break;
-                case "--from": from = NextArg(args, ref i, "--from"); break;
-                case "--out": output = NextArg(args, ref i, "--out"); break;
-                default: throw new AppleToolException($"AotAnywhere: unknown import-xcode option '{args[i]}'.");
+                case "--compilation-directory": directory = NextArg(args, ref i, args[i]); break;
+                case "--compile": compileTo = NextArg(args, ref i, args[i]); break;
+                case "--output-format" or "--minimum-deployment-target" or "--target-device" or "--sdk" or "--module"
+                    or "--output-partial-info-plist" or "--target-device-family" or "--platform":
+                    NextArg(args, ref i, args[i]); break;
+                case "--link":
+                    throw new AppleToolException("AotAnywhere: ibtool --link is not supported off-Mac.");
+                default:
+                    if (args[i].StartsWith("--", StringComparison.Ordinal))
+                        break; // --errors, --warnings, --notices, --auto-activate-custom-fonts, ...
+                    inputs.Add(args[i]);
+                    break;
             }
         }
-        if (output is null || (xip is null) == (from is null))
-            throw new AppleToolException("usage: import-xcode (--xip <Xcode.xip> | --from <Xcode.app>) --out <dir>");
 
-        var sw = Stopwatch.StartNew();
-        if (xip is not null)
+        var errors = new List<object>();
+        foreach (var input in inputs)
         {
-            Console.WriteLine($"AotAnywhere: importing the iOS SDKs from {xip} into {output} (this decompresses the whole archive and takes a few minutes)...");
-            XcodeImporter.ImportXip(xip, output, Console.WriteLine);
+            try
+            {
+                string outDir = directory ?? Path.GetDirectoryName(Path.GetFullPath(compileTo ?? input))!;
+                var written = InterfaceBuilder.Compile(input, outDir);
+                // --compile names the output itself.
+                if (compileTo is not null && directory is null && written.Count == 1 && !string.Equals(written[0], Path.GetFullPath(compileTo), StringComparison.Ordinal))
+                    File.Move(written[0], compileTo, overwrite: true);
+            }
+            catch (Exception e) when (e is InterfaceBuilder.CompileError or System.Xml.XmlException)
+            {
+                errors.Add(new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["description"] = $"{input}: {e.Message} (AotAnywhere's ibtool compiles views, image views and labels only; build on a Mac with Xcode for anything else)",
+                });
+            }
         }
-        else
+
+        var result = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            Console.WriteLine($"AotAnywhere: importing the iOS SDKs from {from} into {output}...");
-            XcodeImporter.ImportDirectory(from!, output, Console.WriteLine);
+            ["com.apple.ibtool.document.errors"] = new Dictionary<string, object>(StringComparer.Ordinal),
+            ["com.apple.ibtool.document.notices"] = new Dictionary<string, object>(StringComparer.Ordinal),
+            ["com.apple.ibtool.document.warnings"] = new Dictionary<string, object>(StringComparer.Ordinal),
+        };
+        if (errors.Count > 0)
+            result["com.apple.ibtool.errors"] = errors;
+        Console.Out.Write(System.Text.Encoding.UTF8.GetString(Plist.WriteXml(result)));
+        return errors.Count > 0 ? 1 : 0;
+    }
+
+    // actool [--errors --warnings --notices --output-format xml1 ...] --compile <dir> [--app-icon <name>]
+    //        [--target-device <idiom>]... [--output-partial-info-plist <path>] <catalog.xcassets>...
+    // Prints the result plist the workload's ACTool task parses.
+    static int AcTool(List<string> args)
+    {
+        string? compile = null, appIcon = null, partialInfo = null;
+        var devices = new List<string>();
+        var catalogs = new List<string>();
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--compile": compile = NextArg(args, ref i, args[i]); break;
+                case "--app-icon": appIcon = NextArg(args, ref i, args[i]); break;
+                case "--target-device": devices.Add(NextArg(args, ref i, args[i])); break;
+                case "--output-partial-info-plist": partialInfo = NextArg(args, ref i, args[i]); break;
+                case "--output-format" or "--minimum-deployment-target" or "--platform" or "--product-type" or "--launch-image"
+                    or "--filter-for-device-model" or "--filter-for-device-os-version" or "--asset-pack-output-specifications"
+                    or "--development-region" or "--optimization":
+                    NextArg(args, ref i, args[i]); break;
+                case "--enable-on-demand-resources":
+                    if (i + 1 < args.Count && args[i + 1] is "YES" or "NO")
+                        i++;
+                    break;
+                case "--accent-color" or "--alternate-app-icon" or "--complication" or "--sticker-pack-identifier-prefix" or "--widget-background-color":
+                    return AcToolResult([], [$"AotAnywhere's actool does not support {args[i]}; build on a Mac with Xcode for that."]);
+                default:
+                    if (args[i].StartsWith("--", StringComparison.Ordinal))
+                        break; // --errors, --warnings, --notices, --compress-pngs, --include-all-app-icons, ...
+                    catalogs.Add(args[i]);
+                    break;
+            }
         }
-        Console.WriteLine($"AotAnywhere: done in {sw.Elapsed:m\\:ss}.");
+        if (compile is null)
+            throw new AppleToolException("AotAnywhere: actool needs --compile <directory>.");
+
+        try
+        {
+            return AcToolResult(AssetCatalog.Compile(catalogs, new AssetCatalog.Options(compile, appIcon, devices, partialInfo)), []);
+        }
+        catch (AssetCatalog.CompileError e)
+        {
+            return AcToolResult([], [$"{e.Message} (AotAnywhere's actool compiles app icons and PNG image sets only; build on a Mac with Xcode for anything else)"]);
+        }
+    }
+
+    static int AcToolResult(List<string> outputs, List<string> errors)
+    {
+        var result = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["com.apple.actool.compilation-results"] = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["output-files"] = outputs.Select(Path.GetFullPath).Cast<object>().ToList(),
+            },
+        };
+        if (errors.Count > 0)
+            result["com.apple.actool.errors"] = errors.Select(e => (object)new Dictionary<string, object>(StringComparer.Ordinal) { ["description"] = e }).ToList();
+        Console.Out.Write(System.Text.Encoding.UTF8.GetString(Plist.WriteXml(result)));
+        return errors.Count > 0 ? 1 : 0;
+    }
+
+    static int RunDitto(List<string> args)
+    {
+        Ditto.Run(args);
         return 0;
     }
 

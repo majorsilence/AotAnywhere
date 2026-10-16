@@ -239,4 +239,37 @@ public class StubLinkTests
         await Assert.That(s.Exports("libUIKit")).DoesNotContain("_OBJC_CLASS_$_NSLayoutConstraint");
         await Assert.That(s.Exports("libobjc")).Contains("_OBJC_CLASS_$_NSObject");
     }
+
+    [Test]
+    public async Task ASwiftOverlayOnlyItProvidesIsAddedToTheLink()
+    {
+        // MAUI's interop references CGFloat (the CoreGraphics overlay) but autolinks only the
+        // CoreFoundation overlay.
+        var s = new Sysroot();
+        string swift = Path.Combine(s.Root, "usr", "lib", "swift");
+        Directory.CreateDirectory(swift);
+        File.WriteAllText(Path.Combine(swift, "libswiftCoreGraphics.tbd"), Tbd.Write("/usr/lib/swift/libswiftCoreGraphics.dylib", StubLink.Targets,
+            new Dictionary<string, IReadOnlyCollection<string>> { ["symbols"] = ["_$s12CoreGraphics7CGFloatVMn"] }));
+        File.WriteAllText(Path.Combine(swift, "libswiftUnused.tbd"), Tbd.Write("/usr/lib/swift/libswiftUnused.dylib", StubLink.Targets,
+            new Dictionary<string, IReadOnlyCollection<string>> { ["symbols"] = ["_$s6Unused1xvp"] }));
+        s.Lib("libSystem", "/usr/lib/libSystem.B.dylib", ["_malloc"]);
+
+        var args = s.Prepare(Device, ["-lSystem"], referenced: ["_malloc", "_$s12CoreGraphics7CGFloatVMn"]);
+
+        await Assert.That(args.Any(a => a.EndsWith("libswiftCoreGraphics.tbd"))).IsTrue();
+        await Assert.That(args.Any(a => a.Contains("Unused"))).IsFalse();
+    }
+
+    [Test]
+    public async Task ALibraryWidePreviousRenamesTheLibraryForOlderTargets()
+    {
+        // Swift's magic-symbols-for-install-name.c: _Builtin_float was part of libswiftDarwin before iOS 18.
+        var s = new Sysroot();
+        s.Lib("libswift_Builtin_float", "/usr/lib/swift/libswift_Builtin_float.dylib",
+            ["__swift_FORCE_LOAD_$_swift_Builtin_float", "$ld$previous$/usr/lib/swift/libswiftDarwin.dylib$$2$12.2$18.0$$"]);
+
+        s.Prepare(Device, ["-lswift_Builtin_float"]);
+
+        await Assert.That(s.Stub("libswift_Builtin_float").InstallName).IsEqualTo("/usr/lib/swift/libswiftDarwin.dylib");
+    }
 }

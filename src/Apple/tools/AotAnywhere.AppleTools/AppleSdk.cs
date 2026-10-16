@@ -28,7 +28,7 @@ public static class AppleSdk
         string platform = PlatformName(sdkName);
         string sdks = Path.Combine(PlatformPath(developerDir, sdkName), "Developer", "SDKs");
         if (!Directory.Exists(sdks))
-            throw new AppleToolException($"AotAnywhere: no {platform} SDKs found under '{sdks}'. Import an Xcode .xip first (see docs/ios-targets.md).");
+            throw new AppleToolException($"AotAnywhere: no {platform} SDKs found under '{sdks}'. Set AotAnywhereXcodeDir to an Xcode folder, or leave it unset to build without one.");
 
         string requested = sdkName.Substring(platform.Length);
         var candidates = Directory.GetDirectories(sdks, platform + "*.sdk")

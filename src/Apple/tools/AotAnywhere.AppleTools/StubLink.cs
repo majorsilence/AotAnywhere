@@ -118,6 +118,29 @@ public static class StubLink
             entries.Add(loaded);
         }
 
+        // Swift overlay libraries the app's objects need but don't autolink: symbols bind to the
+        // module's historical overlay (IosStubs.HistoricalOverlays), which objects built against a
+        // newer SDK no longer name (MAUI's interop uses CGFloat but autolinks the CoreFoundation
+        // overlay). Like an autolinked library, each is added only for what it provides.
+        var addedOverlays = new List<Entry>();
+        if (referenced is not null)
+        {
+            var provided = new HashSet<string>(entries.SelectMany(e => e.Exports.Keys), StringComparer.Ordinal);
+            var missing = referenced.Where(r => !provided.Contains(r)).ToHashSet(StringComparer.Ordinal);
+            string swiftDir = Path.Combine(sysroot, "usr", "lib", "swift");
+            if (missing.Count > 0 && Directory.Exists(swiftDir))
+                foreach (var file in Directory.EnumerateFiles(swiftDir, "*.tbd").Order(StringComparer.Ordinal))
+                {
+                    var docs = Tbd.Parse(File.ReadAllText(file));
+                    if (docs.Count == 0 || entries.Concat(addedOverlays).Any(e => e.StubInstallName == docs[0].InstallName) || !docs[0].Exports.Keys.Any(missing.Contains))
+                        continue;
+                    var overlay = Load(Path.GetRelativePath(sysroot, file), docs[0], minOS, platform, autolinked: true);
+                    addedOverlays.Add(overlay);
+                    missing.ExceptWith(docs[0].Exports.Keys);
+                }
+        }
+        entries.AddRange(addedOverlays);
+
         // Library-wide $ld$previous$/$ld$install_name$ can give two stubs the same install name
         // for this OS version (libswift_Builtin_float was part of libswiftDarwin): one library.
         for (int i = 0; i < entries.Count; i++)
@@ -136,6 +159,7 @@ public static class StubLink
                     a.MovedTo.TryAdd(symbol, moved);
                 entries.RemoveAt(j);
             }
+
 
         // ld64's choice for every symbol: implementing libraries first, then re-exporters.
         var chosen = new Dictionary<string, Entry>(StringComparer.Ordinal);
@@ -221,7 +245,7 @@ public static class StubLink
                 arg = "-weak-l" + arg[2..];
             result.Add(arg);
         }
-        result.AddRange(synthetic.Where(e => !drop.Contains(e)).Select(e => Path.Combine(linkRoot, e.Rels[0])));
+        result.AddRange(addedOverlays.Where(entries.Contains).Concat(synthetic).Where(e => !drop.Contains(e)).Select(e => Path.Combine(linkRoot, e.Rels[0])));
         return result;
     }
 

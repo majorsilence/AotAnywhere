@@ -22,7 +22,7 @@ are in `IosStubs` (AotAnywhere.AppleTools).
 | Functions and globals | The library the bindings name. Mono resolves each of those with `dlopen(path)` + `dlsym`, so the paths are exercised. |
 | libSystem | zig's list (MIT) |
 | libobjc, libc++, zlib, ICU | Their open-source projects' API names and install names |
-| Swift | The module the mangled name encodes, mapped to whatever the inputs' own objects autolink (`-lswiftX` or `-framework X`). Modules that moved library get a `$ld$previous$` back to their old one, from Swift's open-source `@_originallyDefinedIn` attributes. |
+| Swift | The module the mangled name encodes. Swift 5.1's open-source Darwin overlays (the libraries iOS has shipped since 12.2) bind to `libswift<Module>`; other modules bind to whatever the inputs' own objects autolink (`-lswiftX` or `-framework X`). The one library split Swift's open source records (`_Builtin_float` out of `libswiftDarwin` in iOS 18, `magic-symbols-for-install-name.c`) is a `$ld$previous$` directive. |
 | Objective-C classes | Listed under the framework their binding namespace names, as a hint only. See below. |
 
 **Objective-C classes resolve at run time.** Microsoft.iOS never names a class's library: it

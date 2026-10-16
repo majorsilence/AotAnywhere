@@ -5,8 +5,5 @@ install-name:    '/usr/lib/swift/libswiftCoreFoundation.dylib'
 compatibility-version: 0.0.0
 exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
-    symbols:          [
-                        '$ld$previous$/usr/lib/swift/libswiftCoreGraphics.dylib$$2$12.2$16.0$_$s12CoreGraphics7CGFloatVMn$',
-                        '$ld$previous$/usr/lib/swift/libswiftCoreGraphics.dylib$$7$12.2$16.0$_$s12CoreGraphics7CGFloatVMn$',
-                        '_$s12CoreGraphics7CGFloatVMn', '__swift_FORCE_LOAD_$_swiftCoreFoundation' ]
+    symbols:          [ '__swift_FORCE_LOAD_$_swiftCoreFoundation' ]
 ...
