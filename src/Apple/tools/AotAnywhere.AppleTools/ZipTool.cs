@@ -113,9 +113,15 @@ public static class ZipTool
                 var ms = new MemoryStream();
                 s.CopyTo(ms);
                 var data = ms.ToArray();
-                // Keep modes already recorded on Unix; infer the rest.
+                // Keep modes already recorded on Unix, infer the rest; executable content always
+                // gets its execute bits (System.IO.Compression on Unix records 0644 by default).
                 int mode = (e.ExternalAttributes >> 16) & 0xffff;
-                entries.Add(new Entry(e.FullName, mode != 0 ? mode : InferredMode(data), () => data, null));
+                int inferred = InferredMode(data);
+                if (mode == 0)
+                    mode = inferred;
+                else if (inferred == ExecMode)
+                    mode |= 0x49; // u+x, g+x, o+x
+                entries.Add(new Entry(e.FullName, mode, () => data, null));
             }
         Write(archive, entries, CompressionLevel.Optimal);
     }

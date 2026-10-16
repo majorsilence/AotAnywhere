@@ -56,6 +56,8 @@ public class ZipToolTests
         var dir = Temp();
         Directory.CreateDirectory(Path.Combine(dir, "Payload", "App.app"));
         File.WriteAllBytes(Path.Combine(dir, "Payload", "App.app", "App"), MachO);
+        if (!OperatingSystem.IsWindows()) // as the linker leaves it; on Unix zip keeps the file's mode
+            File.SetUnixFileMode(Path.Combine(dir, "Payload", "App.app", "App"), (UnixFileMode)0b111_101_101);
         File.WriteAllText(Path.Combine(dir, "Payload", "App.app", "Info.plist"), "x");
         string ipa = Path.Combine(dir, "out", "App.ipa");
 
