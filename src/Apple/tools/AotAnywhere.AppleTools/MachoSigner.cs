@@ -25,7 +25,7 @@ public sealed record SignOptions(
 /// <summary>
 /// Embeds a code signature into a thin 64-bit Mach-O, laid out as codesign does for iOS:
 /// SuperBlob { CodeDirectory (v0x20400, SHA-256, 16 KiB pages), Requirements, Entitlements,
-/// DER Entitlements, CMS } at LC_CODE_SIGNATURE's data offset, which zig and ld64 both reserve.
+/// DER Entitlements, CMS } at LC_CODE_SIGNATURE's data offset (reserved by the linker, or added here).
 /// </summary>
 public static class MachoSigner
 {
@@ -48,7 +48,10 @@ public static class MachoSigner
     const uint CsAdhoc = 0x2;
     const ulong CsExecSegMainBinary = 0x1, CsExecSegAllowUnsigned = 0x10;
 
-    const int PageShift = 14;                 // 16 KiB code pages, as codesign uses for arm64
+    // Code page size, as codesign picks it: 16 KiB for arm64 macOS and simulator binaries, 4 KiB
+    // for iOS/tvOS/watchOS/visionOS device binaries (and x86_64).
+    const int PageShift16K = 14, PageShift4K = 12;
+    const uint LcBuildVersion = 0x32, LcVersionMinIPhoneOS = 0x25, LcVersionMinTvOS = 0x2f, LcVersionMinWatchOS = 0x30, CpuTypeArm64 = 0x0100000c;
     const int CodeDirectoryHeaderSize = 88;   // through execSegFlags (version 0x20400)
     const int HashSize = 32;
     const byte HashTypeSha256 = 2;
@@ -60,6 +63,7 @@ public static class MachoSigner
 
     public static byte[] Sign(byte[] macho, SignOptions options)
     {
+        macho = AllocateCodeSignature(macho);
         var layout = Layout.Parse(macho);
 
         var requirements = RequirementsBlob(options);
@@ -80,7 +84,8 @@ public static class MachoSigner
         int nSpecialSlots = (int)special.Keys.Max();
 
         uint codeLimit = layout.SignatureOffset;
-        int nCodeSlots = (int)((codeLimit + (1u << PageShift) - 1) >> PageShift);
+        int pageShift = layout.PageShift;
+        int nCodeSlots = (int)((codeLimit + (1u << pageShift) - 1) >> pageShift);
         string? teamId = options.Identity?.TeamId;
         int cdSize = CodeDirectoryHeaderSize + Encoding.UTF8.GetByteCount(options.Identifier) + 1
             + (teamId is null ? 0 : Encoding.UTF8.GetByteCount(teamId) + 1)
@@ -116,7 +121,7 @@ public static class MachoSigner
         if (entitlementsDict is not null && entitlementsDict.TryGetValue("get-task-allow", out var gta) && gta is true)
             execSegFlags |= CsExecSegAllowUnsigned;
 
-        var cd = CodeDirectory(output.AsSpan(0, (int)codeLimit), options.Identifier, teamId, special, nSpecialSlots, nCodeSlots,
+        var cd = CodeDirectory(output.AsSpan(0, (int)codeLimit), pageShift, options.Identifier, teamId, special, nSpecialSlots, nCodeSlots,
             flags: options.Identity is null ? CsAdhoc : 0, layout.TextFileSize, execSegFlags);
 
         var cms = options.Identity is null ? Blob(CsMagicBlobWrapper, []) : Blob(CsMagicBlobWrapper, Cms(cd, options.Identity));
@@ -138,7 +143,7 @@ public static class MachoSigner
     /// <summary>The CDHash: the first 20 bytes of the SHA-256 of the CodeDirectory blob.</summary>
     public static byte[] CdHash(byte[] codeDirectory) => SHA256.HashData(codeDirectory)[..20];
 
-    static byte[] CodeDirectory(ReadOnlySpan<byte> code, string identifier, string? teamId, SortedDictionary<uint, byte[]> special,
+    static byte[] CodeDirectory(ReadOnlySpan<byte> code, int pageShift, string identifier, string? teamId, SortedDictionary<uint, byte[]> special,
         int nSpecialSlots, int nCodeSlots, uint flags, ulong execSegLimit, ulong execSegFlags)
     {
         var ident = Encoding.UTF8.GetBytes(identifier);
@@ -162,7 +167,7 @@ public static class MachoSigner
         s[36] = HashSize;
         s[37] = HashTypeSha256;
         s[38] = 0;                                                            // platform
-        s[39] = PageShift;
+        s[39] = (byte)pageShift;
         // spare2 (40), scatterOffset (44)
         BinaryPrimitives.WriteUInt32BigEndian(s[48..], (uint)teamOffset);
         // spare3 (52), codeLimit64 (56), execSegBase (64)
@@ -176,7 +181,7 @@ public static class MachoSigner
         foreach (var (slot, hash) in special)
             hash.CopyTo(cd, hashOffset - (int)slot * HashSize);
 
-        int page = 1 << PageShift;
+        int page = 1 << pageShift;
         for (int i = 0; i < nCodeSlots; i++)
         {
             int start = i * page;
@@ -297,18 +302,79 @@ public static class MachoSigner
         return b;
     }
 
+    /// <summary>
+    /// What codesign_allocate does for a binary linked without a signature reservation (zig
+    /// reserves one for macOS and the simulator but not for iOS devices): add an empty
+    /// LC_CODE_SIGNATURE in the header padding, pointing at the 16-byte-aligned end of the file,
+    /// which must be the end of __LINKEDIT. <see cref="Sign"/> then sizes it.
+    /// </summary>
+    public static byte[] AllocateCodeSignature(byte[] d)
+    {
+        if (d.Length < 32 || BinaryPrimitives.ReadUInt32LittleEndian(d) != MhMagic64)
+            throw new AppleToolException("AotAnywhere: codesign only supports thin 64-bit Mach-O files.");
+        uint ncmds = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(16));
+        uint sizeofcmds = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(20));
+
+        int linkedit = -1;
+        ulong firstSection = ulong.MaxValue;
+        int off = 32;
+        for (uint i = 0; i < ncmds; i++)
+        {
+            uint cmd = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(off));
+            uint size = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(off + 4));
+            if (cmd == LcCodeSignature)
+                return d;
+            if (cmd == LcSegment64)
+            {
+                if (Encoding.ASCII.GetString(d, off + 8, 16).TrimEnd('\0') == "__LINKEDIT")
+                    linkedit = off;
+                uint nsects = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(off + 64));
+                for (int s = 0; s < nsects; s++)
+                {
+                    uint sectOffset = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(off + 72 + 80 * s + 48));
+                    if (sectOffset != 0)
+                        firstSection = Math.Min(firstSection, sectOffset);
+                }
+            }
+            off += (int)size;
+        }
+
+        if (linkedit < 0)
+            throw new AppleToolException("AotAnywhere: the binary has no __LINKEDIT segment.");
+        ulong linkeditOff = BinaryPrimitives.ReadUInt64LittleEndian(d.AsSpan(linkedit + 40));
+        ulong linkeditSize = BinaryPrimitives.ReadUInt64LittleEndian(d.AsSpan(linkedit + 48));
+        if (linkeditOff + linkeditSize != (ulong)d.Length)
+            throw new AppleToolException("AotAnywhere: cannot add a code signature: __LINKEDIT does not end the file.");
+        int commandsEnd = 32 + (int)sizeofcmds;
+        if (firstSection < (ulong)commandsEnd + 16 || d.AsSpan(commandsEnd, 16).IndexOfAnyExcept((byte)0) >= 0)
+            throw new AppleToolException("AotAnywhere: cannot add a code signature: no room after the load commands (link with -headerpad_max_install_names).");
+
+        uint dataOff = Align((uint)d.Length, 16);
+        var output = new byte[dataOff];
+        d.CopyTo(output, 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(commandsEnd), LcCodeSignature);
+        BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(commandsEnd + 4), 16);
+        BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(commandsEnd + 8), dataOff);
+        BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(16), ncmds + 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(20), sizeofcmds + 16);
+        BinaryPrimitives.WriteUInt64LittleEndian(output.AsSpan(linkedit + 48), dataOff - linkeditOff);
+        return output;
+    }
+
     static uint Align(uint v, uint a) => (v + a - 1) / a * a;
     static ulong Align(ulong v, ulong a) => (v + a - 1) / a * a;
 
-    sealed record Layout(uint FileType, int CodeSignatureCommand, uint SignatureOffset, int LinkeditCommand, ulong LinkeditFileOffset, ulong TextFileSize)
+    sealed record Layout(uint FileType, int CodeSignatureCommand, uint SignatureOffset, int LinkeditCommand, ulong LinkeditFileOffset, ulong TextFileSize, int PageShift)
     {
         public static Layout Parse(byte[] d)
         {
             if (d.Length < 32 || BinaryPrimitives.ReadUInt32LittleEndian(d) != MhMagic64)
                 throw new AppleToolException("AotAnywhere: codesign only supports thin 64-bit Mach-O files.");
+            uint cpuType = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(4));
             uint fileType = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(12));
             uint ncmds = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(16));
 
+            uint platform = 1; // macOS, if no LC_BUILD_VERSION
             int sigCmd = -1, linkedit = -1;
             uint sigOffset = 0;
             ulong linkeditFileOff = 0, textFileSize = 0;
@@ -328,6 +394,15 @@ public static class MachoSigner
                         linkeditFileOff = BinaryPrimitives.ReadUInt64LittleEndian(d.AsSpan(off + 40));
                     }
                 }
+                else if (cmd == LcBuildVersion)
+                {
+                    platform = BinaryPrimitives.ReadUInt32LittleEndian(d.AsSpan(off + 8));
+                }
+                // Older binaries (e.g. prebuilt frameworks) carry LC_VERSION_MIN_* instead.
+                else if (cmd is LcVersionMinIPhoneOS or LcVersionMinTvOS or LcVersionMinWatchOS)
+                {
+                    platform = cmd == LcVersionMinIPhoneOS ? 2u : cmd == LcVersionMinTvOS ? 3u : 4u;
+                }
                 else if (cmd == LcCodeSignature)
                 {
                     sigCmd = off;
@@ -337,12 +412,15 @@ public static class MachoSigner
             }
 
             if (sigCmd < 0)
-                throw new AppleToolException("AotAnywhere: the binary has no LC_CODE_SIGNATURE load command (both zig and ld64 reserve one for arm64; was it linked by another tool?).");
+                throw new AppleToolException("AotAnywhere: the binary has no LC_CODE_SIGNATURE load command.");
             if (linkedit < 0)
                 throw new AppleToolException("AotAnywhere: the binary has no __LINKEDIT segment.");
             if (sigOffset > d.Length || sigOffset < linkeditFileOff)
                 throw new AppleToolException("AotAnywhere: LC_CODE_SIGNATURE points outside __LINKEDIT.");
-            return new Layout(fileType, sigCmd, sigOffset, linkedit, linkeditFileOff, textFileSize);
+            // Device platforms: iOS 2, tvOS 3, watchOS 4, bridgeOS 5, visionOS 11.
+            bool device = platform is 2 or 3 or 4 or 5 or 11;
+            int pageShift = cpuType == CpuTypeArm64 && !device ? PageShift16K : PageShift4K;
+            return new Layout(fileType, sigCmd, sigOffset, linkedit, linkeditFileOff, textFileSize, pageShift);
         }
     }
 }

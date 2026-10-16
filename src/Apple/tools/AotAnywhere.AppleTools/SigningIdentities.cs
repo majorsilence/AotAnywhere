@@ -14,9 +14,16 @@ public static class SigningIdentities
     {
         string p12 = Environment.GetEnvironmentVariable("AOTANYWHERE_SIGN_P12") is { Length: > 0 } p ? p
             : throw new AppleToolException("AotAnywhere: code signing needs a certificate: set AotAnywhereSignP12File (and AotAnywhereSignP12PasswordFile) to your Apple Development or Distribution certificate exported as .p12.");
-        string password = Environment.GetEnvironmentVariable("AOTANYWHERE_SIGN_P12_PASSWORD_FILE") is { Length: > 0 } pf
-            ? File.ReadAllText(pf).TrimEnd('\r', '\n')
-            : "";
+        var identity = LoadP12(p12, Environment.GetEnvironmentVariable("AOTANYWHERE_SIGN_P12_PASSWORD_FILE"));
+        if (!Matches(requested, identity.Certificate, identity.CommonName))
+            Console.Error.WriteLine($"AotAnywhere: warning: the build asked for signing identity '{requested}', but the .p12 holds '{identity.CommonName}'; signing with the .p12's certificate.");
+        return identity;
+    }
+
+    /// <summary>The certificate with a private key in <paramref name="p12"/>, plus any chain certificates in it.</summary>
+    public static SigningIdentity LoadP12(string p12, string? passwordFile)
+    {
+        string password = passwordFile is { Length: > 0 } ? File.ReadAllText(passwordFile).TrimEnd('\r', '\n') : "";
 
         var collection = new X509Certificate2Collection();
         // macOS has no ephemeral key storage; elsewhere keep the key out of any persistent store.
@@ -30,9 +37,6 @@ public static class SigningIdentities
         string cn = cert.GetNameInfo(X509NameType.SimpleName, false);
         string teamId = OrganizationalUnit(cert)
             ?? throw new AppleToolException($"AotAnywhere: the certificate '{cn}' has no team ID (subject OU); is it an Apple-issued signing certificate?");
-
-        if (!Matches(requested, cert, cn))
-            Console.Error.WriteLine($"AotAnywhere: warning: the build asked for signing identity '{requested}', but the .p12 holds '{cn}'; signing with the .p12's certificate.");
 
         return new SigningIdentity(cert, chain, teamId, cn);
     }

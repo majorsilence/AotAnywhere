@@ -73,7 +73,7 @@ handles that itself, no LLVM install needed).
 | **Linux** | `linux-x64`, `linux-arm64`, `linux-arm`, `linux-musl-x64`, `linux-musl-arm64`, `linux-musl-arm` | glibc and musl. The `arm`/ARMv7 RIDs require a `net9.0`+ target framework. |
 | **macOS** | `osx-x64`, `osx-arm64` | Links against bundled Apple linker stubs. See [macOS targets](docs/macos-targets.md). |
 | **Windows** | `win-x64`, `win-arm64` | From Linux/macOS hosts, via zig's MinGW-w64 import libraries. On a Windows host the SDK links these natively with MSVC. See [Windows targets](docs/windows-targets.md). |
-| **iOS** (experimental) | `ios-arm64`, `iossimulator-arm64` | Separate package, `StuDev.AotAnywhere.Apple`, for `net*-ios` NativeAOT apps. **Local development builds only** — see below. |
+| **iOS** (experimental) | `ios-arm64`, `iossimulator-arm64` | Separate package, `StuDev.AotAnywhere.Apple`, for `net*-ios` NativeAOT apps. **Local development builds only** — see below and [iOS targets](docs/ios-targets.md). |
 
 ## Things to be aware of
 
@@ -214,6 +214,8 @@ Things to know:
 
 - [macOS targets](docs/macos-targets.md) — Apple linker stubs, and signing &
   notarizing for distribution
+- [iOS targets](docs/ios-targets.md) — the experimental `StuDev.AotAnywhere.Apple` package,
+  device signing without a Keychain, and supported storyboard/asset catalog features
 - [Windows targets](docs/windows-targets.md) — how win-x64/win-arm64 cross-linking works
 - [Advanced configuration](docs/advanced-configuration.md) — how linking works
   (MSBuild takeovers + managed tasks), and using your own Zig

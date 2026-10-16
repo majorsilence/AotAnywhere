@@ -23,6 +23,7 @@ static class Tools
         "clang" or "clang++" => Clang(tool, args),
         "install_name_tool" => InstallNameTool(args),
         "codesign" => Codesign(args),
+        "signing-identity" => SigningIdentityTool(args),
         "strip" => Strip(args),
         "dsymutil" => DSymUtil(args),
         "objc-shims" => ObjCShimsTool(args),
@@ -323,6 +324,51 @@ static class Tools
             Console.Error.WriteLine($"{path}: signed {(signer is null ? "ad-hoc" : "with " + signer.CommonName)}");
         }
         return 0;
+    }
+
+    // signing-identity --p12 <file> [--password-file <file>] --profile <file.mobileprovision> --bundle-id <id> --out <dir>
+    // Stands in for the workload's DetectSigningIdentity (Keychain + ~/Library profile lookup):
+    // checks that the profile covers the bundle ID and allows the .p12's certificate, copies it to
+    // <dir>/<UUID>.mobileprovision, and prints "thumbprint|profile path without extension|app ID|
+    // distribution type|certificate name|profile name" for the targets. (The workload looks a profile up as
+    // Path.Combine(profileDir, name + ".mobileprovision"), so a rooted path works as the name.)
+    static int SigningIdentityTool(List<string> args)
+    {
+        string? p12 = null, passwordFile = null, profilePath = null, bundleId = null, outDir = null;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "--p12": p12 = NextArg(args, ref i, args[i]); break;
+                case "--password-file": passwordFile = NextArg(args, ref i, args[i]); break;
+                case "--profile": profilePath = NextArg(args, ref i, args[i]); break;
+                case "--bundle-id": bundleId = NextArg(args, ref i, args[i]); break;
+                case "--out": outDir = NextArg(args, ref i, args[i]); break;
+                default: throw new AppleToolException($"AotAnywhere: signing-identity: unknown argument '{args[i]}'.");
+            }
+        }
+        if (p12 is null || profilePath is null || bundleId is null || outDir is null)
+            throw new AppleToolException("usage: signing-identity --p12 <file> [--password-file <file>] --profile <file> --bundle-id <id> --out <dir>");
+
+        var identity = SigningIdentities.LoadP12(p12, passwordFile);
+        var profile = Provisioning.Load(File.ReadAllBytes(profilePath));
+        var now = DateTime.UtcNow;
+        if (identity.Certificate.NotAfter.ToUniversalTime() < now)
+            throw new AppleToolException($"AotAnywhere: the signing certificate '{identity.CommonName}' expired on {identity.Certificate.NotAfter:yyyy-MM-dd}.");
+        if (profile.Expiration < now)
+            throw new AppleToolException($"AotAnywhere: the provisioning profile '{profile.Name}' expired on {profile.Expiration:yyyy-MM-dd}.");
+        if (profile.Platforms.Count > 0 && !profile.Platforms.Contains("iOS"))
+            throw new AppleToolException($"AotAnywhere: the provisioning profile '{profile.Name}' is for {string.Join(", ", profile.Platforms)}, not iOS.");
+        if (!profile.Allows(identity.Certificate))
+            throw new AppleToolException($"AotAnywhere: the provisioning profile '{profile.Name}' does not include the certificate '{identity.CommonName}' from {p12}. Download a profile that lists it, or export the matching certificate.");
+        string appId = profile.AppIdFor(bundleId)
+            ?? throw new AppleToolException($"AotAnywhere: the provisioning profile '{profile.Name}' (app ID {profile.ApplicationIdentifier}) does not cover the bundle identifier '{bundleId}'.");
+
+        Directory.CreateDirectory(outDir);
+        string copy = Path.Combine(Path.GetFullPath(outDir), profile.Uuid + ".mobileprovision");
+        File.Copy(profilePath, copy, overwrite: true);
+        // One line on stdout only (the targets parse it); nothing on stderr.
+        return Print(string.Join('|', identity.Certificate.Thumbprint, Path.ChangeExtension(copy, null), appId, profile.DistributionType, identity.CommonName, profile.Name));
     }
 
     // ibtool [--errors --warnings --notices --output-format xml1 ...] (--compilation-directory <dir> | --compile <path>) <input>...

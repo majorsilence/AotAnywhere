@@ -32,6 +32,7 @@ public class AppleSigningTests
         var cmds = new[] { text, linkedit, sig };
         var data = new byte[codeSize + 0x100];
         BinaryPrimitives.WriteUInt32LittleEndian(data, 0xfeedfacf);
+        BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(4), 0x0100000c);   // arm64
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(12), 2);   // MH_EXECUTE
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(16), (uint)cmds.Length);
         BinaryPrimitives.WriteUInt32LittleEndian(data.AsSpan(20), (uint)cmds.Sum(c => c.Length));

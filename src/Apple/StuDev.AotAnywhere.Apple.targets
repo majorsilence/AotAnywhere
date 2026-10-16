@@ -135,6 +135,67 @@
 
   </Target>
 
+  <!-- Device signing without a Keychain. The workload's DetectSigningIdentity searches the macOS
+       Keychain and ~/Library for a certificate and provisioning profile; instead, the build names
+       them:
+         AotAnywhereSignP12File          - the Apple Development (or Distribution) certificate, as .p12
+         AotAnywhereSignP12PasswordFile  - a file holding the .p12 password (kept out of build logs)
+         AotAnywhereProvisioningProfile  - the .mobileprovision covering the app's bundle ID
+       The tool checks they belong together and pre-sets the detected signing key, which makes
+       DetectSigningIdentity skip its own search; the detected profile, app ID and distribution
+       type are then set the way it would have. Our codesign reads the .p12 from the environment. -->
+  <Target Name="_AotAnywhereAppleSigningIdentity"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and '$(EnableCodeSigning)' == 'true' and '$(_SdkIsSimulator)' != 'true'"
+          BeforeTargets="_DetectSigningIdentity"
+          DependsOnTargets="AotAnywhereAppleSetup">
+
+    <Error Condition="'$(AotAnywhereSignP12File)' == '' or '$(AotAnywhereProvisioningProfile)' == ''"
+           Text="AotAnywhere: signing an iOS device build needs your Apple Development certificate and a provisioning profile, since there is no Keychain to search: set AotAnywhereSignP12File (the certificate exported as .p12), AotAnywhereSignP12PasswordFile (a file holding its password) and AotAnywhereProvisioningProfile (a .mobileprovision downloaded from the Apple Developer portal for this bundle ID). To build without signing, set EnableCodeSigning=false." />
+    <Error Condition="!Exists('$(AotAnywhereSignP12File)')" Text="AotAnywhereSignP12File '$(AotAnywhereSignP12File)' does not exist." />
+    <Error Condition="'$(AotAnywhereSignP12PasswordFile)' != '' and !Exists('$(AotAnywhereSignP12PasswordFile)')" Text="AotAnywhereSignP12PasswordFile '$(AotAnywhereSignP12PasswordFile)' does not exist." />
+    <Error Condition="!Exists('$(AotAnywhereProvisioningProfile)')" Text="AotAnywhereProvisioningProfile '$(AotAnywhereProvisioningProfile)' does not exist." />
+
+    <PropertyGroup>
+      <_AotAnywhereSigningDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'aotanywhere-signing'))</_AotAnywhereSigningDir>
+      <_AotAnywhereSignP12>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AotAnywhereSignP12File)'))</_AotAnywhereSignP12>
+      <_AotAnywhereSignP12Password Condition="'$(AotAnywhereSignP12PasswordFile)' != ''">$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AotAnywhereSignP12PasswordFile)'))</_AotAnywhereSignP12Password>
+    </PropertyGroup>
+
+    <Exec Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; signing-identity --p12 &quot;$(_AotAnywhereSignP12)&quot; @(_AotAnywhereSignPasswordArg->'--password-file &quot;%(Identity)&quot;') --profile &quot;$(AotAnywhereProvisioningProfile)&quot; --bundle-id &quot;$(_BundleIdentifier)&quot; --out &quot;$(_AotAnywhereSigningDir.TrimEnd('/').TrimEnd('\'))&quot;"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="Low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_AotAnywhereSigningInfo" />
+    </Exec>
+
+    <PropertyGroup>
+      <!-- thumbprint|profile path without extension|app ID|distribution type|certificate|profile name -->
+      <_CodeSigningKey>$(_AotAnywhereSigningInfo.Split('|')[0])</_CodeSigningKey>
+    </PropertyGroup>
+    <Message Importance="High" Text="AotAnywhere: signing with '$(_AotAnywhereSigningInfo.Split('|')[4])' and provisioning profile '$(_AotAnywhereSigningInfo.Split('|')[5])' ($(_AotAnywhereSigningInfo.Split('|')[3]))." />
+
+    <ItemGroup>
+      <_AotAnywhereSigningEnv Include="AOTANYWHERE_SIGN_P12" Value="$(_AotAnywhereSignP12)" />
+      <_AotAnywhereSigningEnv Include="AOTANYWHERE_SIGN_P12_PASSWORD_FILE" Value="$(_AotAnywhereSignP12Password)" />
+    </ItemGroup>
+    <AotAnywhereSetEnvironment Variables="@(_AotAnywhereSigningEnv)" PrependToPath="$(_AotAnywhereAppleBin)" />
+  </Target>
+
+  <ItemGroup Condition="'$(AotAnywhereSignP12PasswordFile)' != ''">
+    <_AotAnywhereSignPasswordArg Include="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(AotAnywhereSignP12PasswordFile)'))" />
+  </ItemGroup>
+
+  <Target Name="_AotAnywhereAppleSigningIdentityResult"
+          Condition="'$(_AotAnywhereSigningInfo)' != ''"
+          AfterTargets="_DetectSigningIdentity">
+    <PropertyGroup>
+      <!-- The workload finds a profile as Path.Combine(profileDir, name + ".mobileprovision"),
+           so the rooted path (without extension) of our copy works as its "name". -->
+      <_ProvisioningProfile>$(_AotAnywhereSigningInfo.Split('|')[1])</_ProvisioningProfile>
+      <_AppIdentifier>$(_AotAnywhereSigningInfo.Split('|')[2])</_AppIdentifier>
+      <_DistributionType>$(_AotAnywhereSigningInfo.Split('|')[3])</_DistributionType>
+    </PropertyGroup>
+  </Target>
+
   <!-- AotAnywhereAppleGeneratedHeaders=true: compile the workload's generated native code
        (main.mm, registrar.mm) against Objective-C declarations generated from the binding
        assemblies' metadata ([Register], [Protocol], struct layouts) instead of the SDK's
