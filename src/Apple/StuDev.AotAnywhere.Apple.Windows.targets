@@ -1,0 +1,21 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <!-- Windows only, for local (Mac-less) builds; imported after the iOS workload's Windows layer
+       (Microsoft.iOS.Windows.Sdk) through AfterMicrosoftNETSdkTargets, so these definitions replace
+       its targets that only make sense with a paired Mac. See StuDev.AotAnywhere.Apple.targets. -->
+
+  <!-- Copies of publish inputs to the Mac before the (local) publish copy. -->
+  <Target Name="_CopyResolvedFilesToPublishPreserveNewestToServer" />
+  <Target Name="_CopyResolvedFilesToPublishAlwaysToServer" />
+
+  <!-- The Windows layer runs the trimmer through its own _RunILLink, first asking the Mac where
+       ILLink is (FindILLink: a generated project restored and built there). Its answer is
+       illink.dll next to $(ILLinkTasksAssembly), which is known here. -->
+  <Target Name="_FindILLink" DependsOnTargets="_ComputeVariables">
+    <PropertyGroup>
+      <_RemoteILLinkPath>$([System.IO.Path]::GetDirectoryName('$(ILLinkTasksAssembly)'))\illink.dll</_RemoteILLinkPath>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_RemoteILLinkPath)')" Text="AotAnywhere: ILLink was not found at '$(_RemoteILLinkPath)'." />
+  </Target>
+
+</Project>

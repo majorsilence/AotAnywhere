@@ -31,7 +31,7 @@
            workload's own RecommendedXcodeVersion and SDK version. A synthetic Xcode has no SDK
            headers or libraries, so generated headers and the package's linker stubs are used. -->
     <_AotAnywhereSyntheticXcode Condition="'$(AotAnywhereXcodeDir)' == ''">true</_AotAnywhereSyntheticXcode>
-    <AotAnywhereXcodeDir Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'Xcode.app').TrimEnd('/').TrimEnd(''))</AotAnywhereXcodeDir>
+    <AotAnywhereXcodeDir Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'Xcode.app').TrimEnd('/').TrimEnd('\'))</AotAnywhereXcodeDir>
     <_AotAnywhereSyntheticSdkVersion>$(_XamarinTargetPlatformVersionExecutable)</_AotAnywhereSyntheticSdkVersion>
     <_AotAnywhereSyntheticSdkVersion Condition="'$(_AotAnywhereSyntheticSdkVersion)' == ''">$(RecommendedXcodeVersion)</_AotAnywhereSyntheticSdkVersion>
     <AotAnywhereAppleGeneratedHeaders Condition="'$(AotAnywhereAppleGeneratedHeaders)' == '' and '$(_AotAnywhereSyntheticXcode)' == 'true'">true</AotAnywhereAppleGeneratedHeaders>
@@ -72,15 +72,137 @@
     </Task>
   </UsingTask>
 
+  <!-- Windows: the workload's Windows layer (Microsoft.iOS.Windows.Sdk) builds through a paired
+       Mac: IsMacEnabled stays false until a connection is made, which disables most of the
+       build, and every task with a SessionId is sent to the Mac. Build locally instead:
+       IsMacEnabled is set here, before the workload's props read it (they keep a preset value),
+       and the remote-build switch is turned off once the Windows layer has set it (below), so
+       no build session exists and the connection targets (_SayHello, ...) skip themselves. -->
+  <PropertyGroup Condition="'$(_AotAnywhereAppleActive)' == 'true' and $([MSBuild]::IsOSPlatform('Windows'))">
+    <IsMacEnabled>true</IsMacEnabled>
+    <IsRemoteBuild>false</IsRemoteBuild>
+    <!-- The Windows layer's props translate SDK paths into the paired Mac's (/usr/local/share/dotnet);
+         here the "Mac" is this machine. -->
+    <_DotNetRootRemoteDirectory>$(NetCoreRoot)</_DotNetRootRemoteDirectory>
+    <_XamarinSdkRootOnMac>$(_XamarinSdkRoot)</_XamarinSdkRootOnMac>
+    <_XamarinSdkRootDirectoryOnMac>$(_XamarinSdkRootDirectory)</_XamarinSdkRootDirectoryOnMac>
+    <!-- Targets of the Windows layer that only make sense with a Mac are redefined in a file imported
+         after it (the SDK imports AfterMicrosoftNETSdkTargets, in order, after the workload's targets). -->
+    <AfterMicrosoftNETSdkTargets>$(AfterMicrosoftNETSdkTargets);$(MSBuildThisFileDirectory)StuDev.AotAnywhere.Apple.Windows.targets</AfterMicrosoftNETSdkTargets>
+  </PropertyGroup>
+
+  <Target Name="_AotAnywhereAppleLocalBuild"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and $([MSBuild]::IsOSPlatform('Windows'))"
+          AfterTargets="EvaluateRemoteBuild">
+    <PropertyGroup>
+      <IsRemoteBuild>false</IsRemoteBuild>
+      <BuildSessionId />
+    </PropertyGroup>
+  </Target>
+
+  <!-- Off-Mac, the workload's ibtool/actool tasks (XcodeCompilerToolTask) crash before launching
+       the tool: they ask macOS whether MSBuild runs under Rosetta, P/Invoking sysctlbyname in
+       /usr/lib/libSystem.dylib. The answer is cached in a static, so pre-answer "not translated"
+       in the workload's own (already loaded) task assembly. -->
+  <UsingTask TaskName="AotAnywhereAppleNotTranslated"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Found ParameterType="System.Boolean" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Reflection" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+          foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+          {
+            if (assembly.GetName().Name != "Xamarin.MacDev.Tasks")
+              continue;
+            var field = assembly.GetType("Xamarin.MacDev.Tasks.XcodeCompilerToolTask")?.GetField("translated", BindingFlags.Static | BindingFlags.NonPublic);
+            if (field != null && field.FieldType == typeof(bool?))
+            {
+              field.SetValue(null, (bool?)false);
+              Found = true;
+            }
+          }
+        ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="_AotAnywhereAppleNotTranslated"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and !$([MSBuild]::IsOSPlatform('OSX'))"
+          BeforeTargets="_CoreCompileInterfaceDefinitions;_CoreCompileImageAssets">
+    <AotAnywhereAppleNotTranslated>
+      <Output TaskParameter="Found" PropertyName="_AotAnywhereNotTranslatedFound" />
+    </AotAnywhereAppleNotTranslated>
+    <Message Condition="'$(_AotAnywhereNotTranslatedFound)' != 'true'" Importance="High"
+             Text="AotAnywhere: could not pre-set the workload's Rosetta check (Xamarin.MacDev.Tasks.XcodeCompilerToolTask.translated); if ibtool/actool fail with DllNotFoundException for libSystem.dylib, this workload version needs an update to StuDev.AotAnywhere.Apple." />
+  </Target>
+
+  <!-- Windows: the ACTool task finds the asset catalog of Info.plist's XSAppIconAssets
+       ("Assets.xcassets/AppIcon.appiconset") by looking for ".xcassets" + Path.DirectorySeparatorChar,
+       which is '\' here (with a paired Mac the task runs there), so without this the app icon is
+       silently left out. Use this host's separator. -->
+  <Target Name="_AotAnywhereAppleManifestPaths"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and $([MSBuild]::IsOSPlatform('Windows'))"
+          AfterTargets="_ReadAppManifest">
+    <PropertyGroup>
+      <_XSAppIconAssets>$(_XSAppIconAssets.Replace('/', '\'))</_XSAppIconAssets>
+      <_XSLaunchImageAssets>$(_XSLaunchImageAssets.Replace('/', '\'))</_XSLaunchImageAssets>
+    </PropertyGroup>
+  </Target>
+
+  <!-- Windows: the workload zips the .ipa with System.IO.Compression, which records no Unix file
+       modes, so on the device the app's executable wouldn't be executable. Rewrite it with modes. -->
+  <Target Name="_AotAnywhereAppleIpaModes"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and $([MSBuild]::IsOSPlatform('Windows')) and '$(BuildIpa)' == 'true' and Exists('$(IpaPackagePath)')"
+          AfterTargets="_ZipIpa">
+    <Exec Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; ipa-modes &quot;$(IpaPackagePath)&quot;"
+          StandardOutputImportance="Low" />
+  </Target>
+
   <!-- Tool names the workload (and the ILCompiler targets' probes) launch. -->
   <ItemGroup Condition="'$(_AotAnywhereAppleActive)' == 'true'">
-    <_AotAnywhereAppleTool Include="xcrun;clang;clang++;codesign;install_name_tool;strip;dsymutil;mdimport;ditto" />
+    <!-- zip: the workload packs the .ipa with `zip -r -y` off Windows; ours keeps file modes and
+         needs no zip installed. -->
+    <_AotAnywhereAppleTool Include="xcrun;clang;clang++;codesign;install_name_tool;strip;dsymutil;mdimport;ditto;zip" />
+    <!-- Windows: MSBuild's Exec runs cmd.exe, which lacks the `command -v` the ILCompiler targets probe xcrun with. -->
+    <_AotAnywhereAppleTool Include="command" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
   </ItemGroup>
+
+  <PropertyGroup>
+    <!-- The generated tool wrappers, first on PATH for the build. -->
+    <_AotAnywhereAppleBin>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'bin'))</_AotAnywhereAppleBin>
+    <_AotAnywhereAppleBin>$(_AotAnywhereAppleBin.TrimEnd('/').TrimEnd('\'))</_AotAnywhereAppleBin>
+    <!-- Windows wrappers are copies of a small launcher, compiled with zig. Packed under
+         tools/launcher; a source build uses the copy in the repository. -->
+    <_AotAnywhereLauncherSource>$(MSBuildThisFileDirectory)tools/launcher/aotanywhere-tool.c</_AotAnywhereLauncherSource>
+    <_AotAnywhereLauncherExe>$(_AotAnywhereAppleBin)/aotanywhere-tool.exe</_AotAnywhereLauncherExe>
+    <!-- And a libc.dll for the workload's trimmer steps, which P/Invoke libc's realpath on every host. -->
+    <_AotAnywhereLibcShimSource>$(MSBuildThisFileDirectory)tools/launcher/libc-shim.c</_AotAnywhereLibcShimSource>
+    <_AotAnywhereLibcShim>$(_AotAnywhereAppleBin)/libc.dll</_AotAnywhereLibcShim>
+  </PropertyGroup>
+
+  <!-- Windows: Process.Start and cmd.exe only run executables, so the wrappers can't be shell
+       scripts. Compile the launcher (aotanywhere-tool.c) once; each tool name is a copy of it. -->
+  <Target Name="_AotAnywhereAppleWindowsLauncher"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and $([MSBuild]::IsOSPlatform('Windows'))"
+          DependsOnTargets="SetPathToZig"
+          Inputs="$(_AotAnywhereLauncherSource);$(_AotAnywhereLibcShimSource)"
+          Outputs="$(_AotAnywhereLauncherExe);$(_AotAnywhereLibcShim)">
+    <MakeDir Directories="$(_AotAnywhereAppleBin)" />
+    <Exec Command="&quot;$(_AotAnywhereZigExe)&quot; cc -O2 -s &quot;$(_AotAnywhereLauncherSource)&quot; -o &quot;$(_AotAnywhereLauncherExe)&quot;"
+          StandardOutputImportance="Low" />
+    <Exec Command="&quot;$(_AotAnywhereZigExe)&quot; cc -O2 -s -shared &quot;$(_AotAnywhereLibcShimSource)&quot; -lole32 -o &quot;$(_AotAnywhereLibcShim)&quot;"
+          StandardOutputImportance="Low" />
+  </Target>
 
   <Target Name="AotAnywhereAppleSetup"
           Condition="'$(_AotAnywhereAppleActive)' == 'true'"
           BeforeTargets="PrepareForBuild;_DetectSdkLocations;SetupOSSpecificProps"
-          DependsOnTargets="SetPathToZig">
+          DependsOnTargets="SetPathToZig;_AotAnywhereAppleWindowsLauncher">
 
     <Error Condition="!Exists('$(AotAnywhereAppleToolsDir)AotAnywhere.AppleTools.dll')"
            Text="AotAnywhere: AotAnywhere.AppleTools.dll was not found in '$(AotAnywhereAppleToolsDir)'. For a source build, run `dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release` first." />
@@ -97,9 +219,6 @@
            Text="AotAnywhere: building iOS apps without a Mac requires Native AOT: use `dotnet publish -r ios-arm64 -p:PublishAot=true` (for the simulator: `dotnet build -r iossimulator-arm64 -p:PublishAot=true -p:_IsPublishing=true`). The Mono runtime's iOS AOT compiler only exists for macOS hosts." />
 
     <PropertyGroup>
-      <_AotAnywhereAppleBin>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'bin'))</_AotAnywhereAppleBin>
-      <_AotAnywhereAppleBin>$(_AotAnywhereAppleBin.TrimEnd('/').TrimEnd('\'))</_AotAnywhereAppleBin>
-
       <!-- Point the workload at the chosen Xcode instead of xcode-select. -->
       <XcodeLocation>$(AotAnywhereXcodeDir)</XcodeLocation>
       <!-- Codesign launches $(CodesignPath)/codesign rather than going through xcrun. -->
@@ -119,6 +238,15 @@
     <Exec Condition="!$([MSBuild]::IsOSPlatform('Windows'))"
           Command="chmod +x @(_AotAnywhereAppleTool->'&quot;$(_AotAnywhereAppleBin)/%(Identity)&quot;', ' ')"
           StandardOutputImportance="Low" />
+    <Copy Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+          SourceFiles="$(_AotAnywhereLauncherExe)"
+          DestinationFiles="$(_AotAnywhereAppleBin)/%(_AotAnywhereAppleTool.Identity).exe"
+          SkipUnchangedFiles="true" />
+    <WriteLinesToFile Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+                      File="$(_AotAnywhereAppleBin)/aotanywhere-tool.cfg"
+                      Lines="$(_AotAnywhereDotnetHost);$([System.IO.Path]::GetFullPath('$(_AotAnywhereAppleDll)'))"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
 
     <ItemGroup>
       <_AotAnywhereAppleEnv Include="AOTANYWHERE_ZIG" Value="$(_AotAnywhereZigExe)" />

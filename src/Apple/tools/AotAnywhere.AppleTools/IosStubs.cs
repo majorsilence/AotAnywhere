@@ -307,15 +307,17 @@ public static class IosStubs
             yield return Path.ChangeExtension(installName.TrimStart('/'), ".tbd");
             yield break;
         }
-        string dir = Path.GetDirectoryName(installName)!.TrimStart('/');
-        string file = Path.GetFileName(installName);                          // libz.1.dylib
-        yield return Path.Combine(dir, Path.ChangeExtension(file, ".tbd"));    // libz.1.tbd
+        // Install names are POSIX paths on every host, so split on '/' rather than with Path.
+        int slash = installName.LastIndexOf('/');
+        string dir = installName[..slash].TrimStart('/');
+        string file = installName[(slash + 1)..];                              // libz.1.dylib
+        yield return $"{dir}/{Path.ChangeExtension(file, ".tbd")}";            // libz.1.tbd
         string stem = Regex.Replace(file, @"(\.[A-Z0-9]+)*\.dylib$", "");      // libz
         if (stem + ".dylib" != file)
-            yield return Path.Combine(dir, stem + ".tbd");                     // libz.tbd, for -lz
+            yield return $"{dir}/{stem}.tbd";                                  // libz.tbd, for -lz
         if (installName == LibSystem)
             foreach (var alias in LibSystemAliases)
-                yield return Path.Combine(dir, alias + ".tbd");
+                yield return $"{dir}/{alias}.tbd";
     }
 
     static string FrameworkPath(string name) => $"/System/Library/Frameworks/{name}.framework/{name}";

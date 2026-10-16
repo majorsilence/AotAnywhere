@@ -42,6 +42,24 @@ Native AOT is required: the Mono runtime's iOS AOT compiler only exists for
 macOS hosts. Simulator RIDs can't be `dotnet publish`ed, hence the
 `build -p:_IsPublishing=true` form.
 
+### On Windows
+
+The workload's Windows layer normally sends the build to a paired Mac. The package
+builds locally instead: it switches the remote build off, points the SDK paths the
+layer translates for the Mac back at this machine, and replaces the few Windows
+targets that only copy files to and from the Mac. No Mac, SSH connection or Visual
+Studio pairing is involved. In addition:
+
+- The tool wrappers are copies of a small launcher compiled with zig on first use
+  (`tools/launcher/aotanywhere-tool.c`), since Windows only runs executables. A
+  `libc.dll` shim (`libc-shim.c`) covers the `realpath` that older workload versions'
+  trimmer steps call on every host.
+- The `.ipa` is rewritten with Unix file modes, which the workload's Windows zip
+  leaves out; without them the app's executable isn't executable on the device.
+
+A simulator build can't be run on Windows (there is no iOS simulator there); copy
+the `.app` to a Mac with a simulator, or install the `.ipa` on a device.
+
 ## Signing device builds
 
 Simulator builds are signed ad hoc and need nothing. A device build needs what

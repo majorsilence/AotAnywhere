@@ -35,6 +35,12 @@ static class Tools
         "nib-dump" => Print(NibArchive.Read(File.ReadAllBytes(args[0])).Dump()),
         // Spotlight indexing of the build output; meaningless off-Mac.
         "mdimport" => 0,
+        // On Windows, MSBuild's Exec runs cmd.exe, which has no `command`; the ILCompiler
+        // targets probe for xcrun with `command -v xcrun`, so the wrapper dir provides one.
+        "command" => CommandV(args),
+        // The .ipa: `zip -r -y` (macOS/Linux), or a mode fix-up of the Windows-made archive.
+        "zip" => Done(() => ZipTool.Run(args)),
+        "ipa-modes" => Done(() => ZipTool.FixModes(args.Single())),
         // On a Mac with Xcode (AotAnywhereAppleForce), defer anything not reimplemented here.
         _ when OperatingSystem.IsMacOS() && File.Exists(AppleXcrun) => Exec(AppleXcrun, [tool, .. args], AppleToolEnvironment()),
         _ => throw new AppleToolException($"AotAnywhere: the Xcode tool '{tool}' is not available off-Mac. If the project uses a feature that needs it (Metal shaders, Core ML models, SceneKit assets, ...), it can only be built on a Mac with Xcode."),
@@ -577,6 +583,30 @@ static class Tools
     {
         Console.WriteLine(s);
         return 0;
+    }
+
+    static int Done(Action action)
+    {
+        action();
+        return 0;
+    }
+
+    // command -v <name>: print where <name> resolves on PATH (with PATHEXT on Windows); exit 1 if nowhere.
+    static int CommandV(List<string> args)
+    {
+        if (args is not ["-v", var name])
+            throw new AppleToolException("AotAnywhere: only `command -v <name>` is supported.");
+        var extensions = OperatingSystem.IsWindows()
+            ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT").Split(';', StringSplitOptions.RemoveEmptyEntries).Prepend("")
+            : [""];
+        foreach (var dir in (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+            foreach (var ext in extensions)
+            {
+                string candidate = Path.Combine(dir.Trim('"'), name + ext);
+                if (File.Exists(candidate))
+                    return Print(candidate);
+            }
+        return 1;
     }
 
     // AOTANYWHERE_APPLE_DEBUG=1: log the commands run and keep per-link temporary files.

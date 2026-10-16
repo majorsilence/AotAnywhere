@@ -25,9 +25,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="StuDev.AotAnywhere.Apple.targets">
+    <None Include="StuDev.AotAnywhere.Apple.targets;StuDev.AotAnywhere.Apple.Windows.targets">
       <Pack>true</Pack>
       <PackagePath>build</PackagePath>
+    </None>
+    <!-- Windows: the tool-wrapper launcher and libc shim, compiled with zig on first use. -->
+    <None Include="tools/launcher/*.c">
+      <Pack>true</Pack>
+      <PackagePath>build/tools/launcher</PackagePath>
     </None>
     <!-- Shared with StuDev.AotAnywhere: one source file packed into both packages. -->
     <None Include="../ZigResolve.targets">
@@ -45,7 +50,8 @@
     <!-- The iOS linker stubs (eng/generate-apple-ios-sysroot.cs), next to the targets. -->
     <None Include="sysroot/**/*.tbd;sysroot/SDKSettings.json">
       <Pack>true</Pack>
-      <PackagePath>build/sysroot/%(RecursiveDir)</PackagePath>
+      <!-- NuGet keeps a wildcard item's directory under PackagePath itself. -->
+      <PackagePath>build/sysroot/</PackagePath>
     </None>
     <None Include="../../README.md">
       <Pack>true</Pack>
