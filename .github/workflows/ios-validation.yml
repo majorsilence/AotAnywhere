@@ -10,6 +10,9 @@ name: iOS Validation
 #   validate - on a Mac: Apple's codesign checks every host's apps, each simulator build runs its
 #              storyboard self-tests in a simulator, and the signed .ipa files are inspected.
 # These are local-development builds; App Store distribution is out of scope (see the README).
+#
+# Runners are GitHub-hosted by default; set the repository variables IOS_LINUX_RUNNER,
+# IOS_WINDOWS_RUNNER and IOS_MACOS_RUNNER (e.g. depot-ubuntu-latest) to use others.
 
 on:
   pull_request:
@@ -49,7 +52,7 @@ env:
 jobs:
   zig:
     name: Patched zig
-    runs-on: depot-ubuntu-latest
+    runs-on: ${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -92,13 +95,13 @@ jobs:
       matrix:
         include:
           - host: linux
-            runner: depot-ubuntu-latest
+            runner: ${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}
             zig: x86_64-linux-musl
           - host: windows
-            runner: depot-windows-latest
+            runner: ${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}
             zig: x86_64-windows-gnu
           - host: macos
-            runner: depot-macos-latest
+            runner: ${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}
             zig: aarch64-macos-none
     runs-on: ${{ matrix.runner }}
     defaults:
@@ -173,7 +176,7 @@ jobs:
     name: Run on a Mac
     needs: build
     if: ${{ !cancelled() }}
-    runs-on: depot-macos-latest
+    runs-on: ${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}
     steps:
       - uses: actions/checkout@v7
 
