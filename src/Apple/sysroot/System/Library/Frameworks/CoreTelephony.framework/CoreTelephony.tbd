@@ -1,0 +1,21 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreTelephony.framework/CoreTelephony'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CTRadioAccessTechnologyCDMA1x, _CTRadioAccessTechnologyCDMAEVDORev0,
+                        _CTRadioAccessTechnologyCDMAEVDORevA, _CTRadioAccessTechnologyCDMAEVDORevB,
+                        _CTRadioAccessTechnologyEdge, _CTRadioAccessTechnologyGPRS,
+                        _CTRadioAccessTechnologyHSDPA, _CTRadioAccessTechnologyHSUPA,
+                        _CTRadioAccessTechnologyLTE, _CTRadioAccessTechnologyNR,
+                        _CTRadioAccessTechnologyNRNSA, _CTRadioAccessTechnologyWCDMA,
+                        _CTRadioAccessTechnologyeHRPD,
+                        _CTServiceRadioAccessTechnologyDidChangeNotification ]
+    objc-classes:     [ CTCall, CTCallCenter, CTCarrier, CTCellularData,
+                        CTCellularPlanLifecycleProperties, CTCellularPlanProperties,
+                        CTCellularPlanProvisioning, CTCellularPlanProvisioningRequest,
+                        CTCellularPlanStatus, CTQuickSwitchManager, CTSubscriber, CTSubscriberInfo,
+                        CTTelephonyNetworkInfo ]
+...

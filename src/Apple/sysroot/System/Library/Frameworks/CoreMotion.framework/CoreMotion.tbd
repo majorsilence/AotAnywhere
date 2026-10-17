@@ -1,0 +1,20 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreMotion.framework/CoreMotion'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CMErrorDomain ]
+    objc-classes:     [ CMAbsoluteAltitudeData, CMAccelerometerData, CMAltimeter, CMAltitudeData,
+                        CMAmbientPressureData, CMAttitude, CMBatchedSensorManager, CMDeviceMotion,
+                        CMDyskineticSymptomResult, CMGyroData, CMHeadphoneActivityManager,
+                        CMHeadphoneMotionManager, CMHighFrequencyHeartRateData, CMLogItem,
+                        CMMagnetometerData, CMMotionActivity, CMMotionActivityManager,
+                        CMMotionManager, CMOdometerData, CMPedometer, CMPedometerData,
+                        CMPedometerEvent, CMRecordedAccelerometerData, CMRecordedDeviceMotion,
+                        CMRecordedPressureData, CMRecordedRotationRateData, CMRotationRateData,
+                        CMSensorDataList, CMSensorRecorder, CMStepCounter, CMTremorResult,
+                        CMWaterSubmersionEvent, CMWaterSubmersionManager,
+                        CMWaterSubmersionMeasurement, CMWaterTemperature ]
+...

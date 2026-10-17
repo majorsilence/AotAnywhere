@@ -1,0 +1,41 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Accessibility.framework/Accessibility'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _AXAnimatedImagesEnabled, _AXAnimatedImagesEnabledDidChangeNotification,
+                        _AXApplicationAccessibilityEnabled,
+                        _AXApplicationAccessibilityEnabledDidChangeNotification,
+                        _AXAssistiveAccessEnabled, _AXFeatureOverrideSessionErrorDomain,
+                        _AXMFiHearingDevicePairedUUIDs,
+                        _AXMFiHearingDevicePairedUUIDsDidChangeNotification,
+                        _AXMFiHearingDeviceStreamingEar,
+                        _AXMFiHearingDeviceStreamingEarDidChangeNotification, _AXNameFromColor,
+                        _AXOpenSettingsFeature, _AXOpenSettingsFeatureIsSupported,
+                        _AXPrefersActionSliderAlternative,
+                        _AXPrefersActionSliderAlternativeDidChangeNotification,
+                        _AXPrefersHorizontalTextLayout,
+                        _AXPrefersHorizontalTextLayoutDidChangeNotification,
+                        _AXPrefersNonBlinkingTextInsertionIndicator,
+                        _AXPrefersNonBlinkingTextInsertionIndicatorDidChangeNotification,
+                        _AXReduceHighlightingEffectsEnabled,
+                        _AXReduceHighlightingEffectsEnabledDidChangeNotification,
+                        _AXShowBordersEnabled, _AXShowBordersEnabledStatusDidChangeNotification,
+                        _AXSpeechAttributeSSML, _AXSupportsBidirectionalAXMFiHearingDeviceStreaming,
+                        _AXTechnologyAutomation, _AXTechnologyFullKeyboardAccess,
+                        _AXTechnologyHoverText, _AXTechnologySpeakScreen,
+                        _AXTechnologySwitchControl, _AXTechnologyVoiceControl,
+                        _AXTechnologyVoiceOver, _AXTechnologyZoom ]
+    objc-classes:     [ AXBrailleMap, AXBrailleTable, AXBrailleTranslationResult,
+                        AXBrailleTranslator, AXCategoricalDataAxisDescriptor, AXChartDescriptor,
+                        AXCustomContent, AXDataPoint, AXDataPointValue, AXDataSeriesDescriptor,
+                        AXFeatureOverrideSession, AXFeatureOverrideSessionManager, AXLiveAudioGraph,
+                        AXMathExpression, AXMathExpressionFenced, AXMathExpressionFraction,
+                        AXMathExpressionIdentifier, AXMathExpressionMultiscript,
+                        AXMathExpressionNumber, AXMathExpressionOperator, AXMathExpressionRoot,
+                        AXMathExpressionRow, AXMathExpressionSubSuperscript, AXMathExpressionTable,
+                        AXMathExpressionTableCell, AXMathExpressionTableRow, AXMathExpressionText,
+                        AXMathExpressionUnderOver, AXNumericDataAxisDescriptor, AXRequest ]
+...

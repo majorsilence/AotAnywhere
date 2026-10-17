@@ -1,0 +1,20 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/MetalPerformanceShadersGraph.framework/MetalPerformanceShadersGraph'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    objc-classes:     [ MPSGraph, MPSGraphCompilationDescriptor, MPSGraphConvolution2DOpDescriptor,
+                        MPSGraphConvolution3DOpDescriptor, MPSGraphCreateSparseOpDescriptor,
+                        MPSGraphDepthwiseConvolution2DOpDescriptor,
+                        MPSGraphDepthwiseConvolution3DOpDescriptor, MPSGraphDevice,
+                        MPSGraphExecutable, MPSGraphExecutableExecutionDescriptor,
+                        MPSGraphExecutableSerializationDescriptor, MPSGraphExecutionDescriptor,
+                        MPSGraphFFTDescriptor, MPSGraphGRUDescriptor, MPSGraphImToColOpDescriptor,
+                        MPSGraphLSTMDescriptor, MPSGraphObject, MPSGraphOperation,
+                        MPSGraphPooling2DOpDescriptor, MPSGraphPooling4DOpDescriptor,
+                        MPSGraphRandomOpDescriptor, MPSGraphSDPADescriptor, MPSGraphShapedType,
+                        MPSGraphSingleGateRNNDescriptor, MPSGraphStencilOpDescriptor,
+                        MPSGraphTensor, MPSGraphTensorData, MPSGraphType, MPSGraphVariableOp ]
+...

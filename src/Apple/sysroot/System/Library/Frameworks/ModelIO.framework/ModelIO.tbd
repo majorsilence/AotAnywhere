@@ -1,0 +1,39 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/ModelIO.framework/ModelIO'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _MDLVertexAttributeAnisotropy, _MDLVertexAttributeBinormal,
+                        _MDLVertexAttributeBitangent, _MDLVertexAttributeColor,
+                        _MDLVertexAttributeEdgeCrease, _MDLVertexAttributeJointIndices,
+                        _MDLVertexAttributeJointWeights, _MDLVertexAttributeNormal,
+                        _MDLVertexAttributeOcclusionValue, _MDLVertexAttributePosition,
+                        _MDLVertexAttributeShadingBasisU, _MDLVertexAttributeShadingBasisV,
+                        _MDLVertexAttributeSubdivisionStencil, _MDLVertexAttributeTangent,
+                        _MDLVertexAttributeTextureCoordinate, _kUTType3dObject, _kUTTypeAlembic,
+                        _kUTTypePolygon, _kUTTypeStereolithography,
+                        _kUTTypeUniversalSceneDescription, _kUTTypeUniversalSceneDescriptionMobile ]
+    objc-classes:     [ MDLAnimatedMatrix4x4, MDLAnimatedQuaternion, MDLAnimatedQuaternionArray,
+                        MDLAnimatedScalar, MDLAnimatedScalarArray, MDLAnimatedValue,
+                        MDLAnimatedVector2, MDLAnimatedVector3, MDLAnimatedVector3Array,
+                        MDLAnimatedVector4, MDLAnimationBindComponent, MDLAreaLight, MDLAsset,
+                        MDLBundleAssetResolver, MDLCamera, MDLCheckerboardTexture,
+                        MDLColorSwatchTexture, MDLLight, MDLLightProbe, MDLMaterial,
+                        MDLMaterialProperty, MDLMaterialPropertyConnection,
+                        MDLMaterialPropertyGraph, MDLMaterialPropertyNode, MDLMatrix4x4Array,
+                        MDLMesh, MDLMeshBufferData, MDLMeshBufferDataAllocator, MDLMeshBufferMap,
+                        MDLMeshBufferZoneDefault, MDLNoiseTexture, MDLNormalMapTexture, MDLObject,
+                        MDLObjectContainer, MDLPackedJointAnimation, MDLPathAssetResolver,
+                        MDLPhotometricLight, MDLPhysicallyPlausibleLight,
+                        MDLPhysicallyPlausibleScatteringFunction, MDLRelativeAssetResolver,
+                        MDLScatteringFunction, MDLSkeleton, MDLSkyCubeTexture,
+                        MDLStereoscopicCamera, MDLSubmesh, MDLSubmeshTopology, MDLTexture,
+                        MDLTextureFilter, MDLTextureSampler, MDLTransform, MDLTransformMatrixOp,
+                        MDLTransformOrientOp, MDLTransformRotateOp, MDLTransformRotateXOp,
+                        MDLTransformRotateYOp, MDLTransformRotateZOp, MDLTransformScaleOp,
+                        MDLTransformStack, MDLTransformTranslateOp, MDLURLTexture, MDLUtility,
+                        MDLVertexAttribute, MDLVertexAttributeData, MDLVertexBufferLayout,
+                        MDLVertexDescriptor, MDLVoxelArray ]
+...

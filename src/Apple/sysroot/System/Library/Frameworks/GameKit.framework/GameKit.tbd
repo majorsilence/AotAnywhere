@@ -1,0 +1,25 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/GameKit.framework/GameKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _GKErrorDomain, _GKExchangeTimeoutDefault, _GKExchangeTimeoutNone,
+                        _GKGameSessionErrorDomain, _GKPlayerAuthenticationDidChangeNotificationName,
+                        _GKPlayerDidChangeNotificationName, _GKPlayerIDNoLongerAvailable,
+                        _GKTurnTimeoutDefault, _GKTurnTimeoutNone, _GKVoiceChatServiceErrorDomain ]
+    objc-classes:     [ GKAccessPoint, GKAchievement, GKAchievementChallenge,
+                        GKAchievementDescription, GKAchievementViewController, GKBasePlayer,
+                        GKChallenge, GKChallengeDefinition, GKChallengeEventHandler, GKCloudPlayer,
+                        GKFriendRequestComposeViewController, GKGameActivity,
+                        GKGameActivityDefinition, GKGameCenterViewController, GKGameSession,
+                        GKInvite, GKLeaderboard, GKLeaderboardEntry, GKLeaderboardScore,
+                        GKLeaderboardSet, GKLeaderboardViewController, GKLocalPlayer, GKMatch,
+                        GKMatchRequest, GKMatchedPlayers, GKMatchmaker, GKMatchmakerViewController,
+                        GKNotificationBanner, GKPlayer, GKSavedGame, GKScore, GKScoreChallenge,
+                        GKSession, GKTurnBasedEventHandler, GKTurnBasedExchange,
+                        GKTurnBasedExchangeReply, GKTurnBasedMatch,
+                        GKTurnBasedMatchmakerViewController, GKTurnBasedParticipant, GKVoiceChat,
+                        GKVoiceChatService ]
+...

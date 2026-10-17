@@ -1,0 +1,16 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreNFC.framework/CoreNFC'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _NFCErrorDomain, _NFCISO15693TagResponseErrorKey,
+                        _NFCTagResponseUnexpectedLengthErrorKey ]
+    objc-classes:     [ NFCISO15693CustomCommandConfiguration,
+                        NFCISO15693ReadMultipleBlocksConfiguration, NFCISO15693ReaderSession,
+                        NFCISO7816APDU, NFCNDEFMessage, NFCNDEFPayload, NFCNDEFReaderSession,
+                        NFCPaymentTagReaderSession, NFCReaderSession, NFCTagCommandConfiguration,
+                        NFCTagReaderSession, NFCTagReaderSessionConfiguration,
+                        NFCVASCommandConfiguration, NFCVASReaderSession, NFCVASResponse ]
+...

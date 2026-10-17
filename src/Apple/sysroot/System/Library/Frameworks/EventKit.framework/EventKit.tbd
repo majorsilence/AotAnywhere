@@ -1,0 +1,14 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/EventKit.framework/EventKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _EKErrorDomain, _EKEventStoreChangedNotification ]
+    objc-classes:     [ EKAlarm, EKCalendar, EKCalendarItem, EKEvent, EKEventStore, EKObject,
+                        EKParticipant, EKRecurrenceDayOfWeek, EKRecurrenceEnd, EKRecurrenceRule,
+                        EKReminder, EKSource, EKStructuredLocation, EKVirtualConferenceDescriptor,
+                        EKVirtualConferenceProvider, EKVirtualConferenceRoomTypeDescriptor,
+                        EKVirtualConferenceURLDescriptor ]
+...

@@ -1,0 +1,8 @@
+<Project>
+
+  <!-- Intentionally empty: the package's real targets are imported through
+       build/StuDev.AotAnywhere.Apple.targets (NuGet's auto-import of the self
+       PackageReference that Sdk.props declares), exactly as for a plain
+       PackageReference consumer. -->
+
+</Project>

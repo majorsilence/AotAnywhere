@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Xcode stand-in for off-Mac iOS builds. The net*-ios workload launches
+       every tool as a bare `xcrun <tool> ...` (or `clang`, `codesign`, ...) off
+       PATH; the Apple package's targets put generated wrappers named after
+       those tools on PATH, and each one runs this assembly with its own name
+       as the first argument. The workload keeps its own argument logic - this
+       only translates at the tool boundary (clang -> zig cc, and C#
+       implementations of the Mach-O tools).
+
+       Framework-dependent and run through the SDK's own dotnet host
+       ($DOTNET_HOST_PATH), so one portable DLL serves every build host.
+       RollForward lets a net8.0 build run on whatever runtime the SDK has. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+    <!-- Always launched as `dotnet AotAnywhere.AppleTools.dll` (see the wrappers in
+         StuDev.AotAnywhere.Apple.targets); a host-specific apphost would be dead weight. -->
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SignedCms, for the CMS blob in identity code signatures. Keep it on the target
+         framework's servicing line (8.0.x for net8.0): newer majors carry an app-local
+         System.Formats.Asn1 that shadows the framework's once the tool rolls forward to a
+         newer runtime, breaking the runtime's own crypto (MissingMethodException). -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.2" />
+  </ItemGroup>
+
+</Project>

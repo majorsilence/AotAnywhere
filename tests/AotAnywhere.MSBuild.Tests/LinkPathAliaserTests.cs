@@ -1,10 +1,14 @@
 using AotAnywhere.Tasks;
+using TUnit.Core.Enums;
 
 namespace AotAnywhere.MSBuild.Tests;
 
 // The spaced-path aliasing that keeps zig's unquoted verbose link line
 // reconstructible for the /OPT re-link pass. Pure decision logic; symlink
-// creation is recorded, not performed.
+// creation is recorded, not performed. The aliasing only runs on non-Windows
+// hosts (on Windows the SDK's MSVC link applies), so it is POSIX path logic and
+// the tests are skipped on a Windows host.
+[ExcludeOn(OS.Windows)]
 public class LinkPathAliaserTests
 {
     const string Scratch = "/tmp/scratch";

@@ -1,0 +1,48 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CarPlay.framework/CarPlay'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CPButtonMaximumImageSize, _CPGridTemplateMaximumItems,
+                        _CPMaximumListSectionImageSize, _CPMaximumMessageItemImageSize,
+                        _CPMaximumMessageItemLeadingDetailTextImageSize,
+                        _CPMaximumNumberOfGridImages, _CPNowPlayingButtonMaximumImageSize,
+                        _CPTemplateApplicationDashboardSceneSessionRoleApplication,
+                        _CPTemplateApplicationInstrumentClusterSceneSessionRoleApplication,
+                        _CPTemplateApplicationSceneSessionRoleApplication, _CarPlayErrorDomain ]
+    objc-classes:     [ CPActionSheetTemplate, CPAlertAction, CPAlertTemplate,
+                        CPAssistantCellConfiguration, CPBarButton, CPButton,
+                        CPChargingStationConnection, CPContact, CPContactCallButton,
+                        CPContactDirectionsButton, CPContactMessageButton, CPContactTemplate,
+                        CPDashboardButton, CPDashboardController, CPGridButton, CPGridTemplate,
+                        CPImageOverlay, CPImageSet, CPInformationItem, CPInformationRatingItem,
+                        CPInformationTemplate, CPInstrumentClusterController, CPInterfaceController,
+                        CPLane, CPLaneGuidance, CPListImageRowItem, CPListImageRowItemCardElement,
+                        CPListImageRowItemCondensedElement, CPListImageRowItemElement,
+                        CPListImageRowItemGridElement, CPListImageRowItemImageGridElement,
+                        CPListImageRowItemRowElement, CPListItem, CPListSection, CPListTemplate,
+                        CPListTemplateDetailsHeader, CPManeuver, CPMapButton, CPMapPanel,
+                        CPMapPanelButtonConfiguration, CPMapPanelItem, CPMapPanelSection,
+                        CPMapTemplate, CPMapTemplateWaypoint, CPMessageComposeBarButton,
+                        CPMessageGridItemConfiguration, CPMessageListItem,
+                        CPMessageListItemLeadingConfiguration,
+                        CPMessageListItemTrailingConfiguration, CPMultiStopCardConfiguration,
+                        CPNavigationAlert, CPNavigationSession, CPNavigationWaypoint,
+                        CPNowPlayingAddToLibraryButton, CPNowPlayingButton, CPNowPlayingImageButton,
+                        CPNowPlayingMode, CPNowPlayingModeSports, CPNowPlayingMoreButton,
+                        CPNowPlayingPlaybackRateButton, CPNowPlayingRepeatButton,
+                        CPNowPlayingShuffleButton, CPNowPlayingSportsClock,
+                        CPNowPlayingSportsEventStatus, CPNowPlayingSportsTeam,
+                        CPNowPlayingSportsTeamLogo, CPNowPlayingTemplate, CPPanel,
+                        CPPanelButtonConfiguration, CPPanelItem, CPPlaybackConfiguration,
+                        CPPointOfInterest, CPPointOfInterestTemplate, CPRouteChoice, CPRouteDetail,
+                        CPRouteInformation, CPRouteSegment, CPSearchTemplate,
+                        CPSessionConfiguration, CPSportsOverlay, CPTabBarTemplate, CPTemplate,
+                        CPTemplateApplicationDashboardScene,
+                        CPTemplateApplicationInstrumentClusterScene, CPTemplateApplicationScene,
+                        CPTextButton, CPThumbnailImage, CPTravelEstimates, CPTrip,
+                        CPTripPreviewTextConfiguration, CPVoiceControlState, CPVoiceControlTemplate,
+                        CPWindow ]
+...

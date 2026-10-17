@@ -1,0 +1,19 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/SpriteKit.framework/SpriteKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    objc-classes:     [ SK3DNode, SKAction, SKAttribute, SKAttributeValue, SKAudioNode,
+                        SKCameraNode, SKConstraint, SKCropNode, SKEffectNode, SKEmitterNode,
+                        SKFieldNode, SKKeyframeSequence, SKLabelNode, SKLightNode, SKMutableTexture,
+                        SKNode, SKPhysicsBody, SKPhysicsContact, SKPhysicsJoint,
+                        SKPhysicsJointFixed, SKPhysicsJointLimit, SKPhysicsJointPin,
+                        SKPhysicsJointSliding, SKPhysicsJointSpring, SKPhysicsWorld, SKRange,
+                        SKReachConstraints, SKReferenceNode, SKRegion, SKRenderer, SKScene,
+                        SKShader, SKShapeNode, SKSpriteNode, SKTexture, SKTextureAtlas,
+                        SKTileDefinition, SKTileGroup, SKTileGroupRule, SKTileMapNode, SKTileSet,
+                        SKTransformNode, SKTransition, SKUniform, SKVideoNode, SKView,
+                        SKWarpGeometry, SKWarpGeometryGrid ]
+...

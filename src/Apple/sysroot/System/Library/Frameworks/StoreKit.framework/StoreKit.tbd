@@ -1,0 +1,53 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/StoreKit.framework/StoreKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ '_$s8StoreKit03AppA0O13requestReview2inySo13UIWindowSceneC_tFZ',
+                        _SKANErrorDomain, _SKAdNetworkCoarseConversionValueHigh,
+                        _SKAdNetworkCoarseConversionValueLow,
+                        _SKAdNetworkCoarseConversionValueMedium,
+                        _SKCloudServiceCapabilitiesDidChangeNotification,
+                        _SKCloudServiceSetupActionSubscribe,
+                        _SKCloudServiceSetupMessageIdentifierAddMusic,
+                        _SKCloudServiceSetupMessageIdentifierConnect,
+                        _SKCloudServiceSetupMessageIdentifierJoin,
+                        _SKCloudServiceSetupMessageIdentifierPlayMusic,
+                        _SKCloudServiceSetupOptionsActionKey,
+                        _SKCloudServiceSetupOptionsAffiliateTokenKey,
+                        _SKCloudServiceSetupOptionsCampaignTokenKey,
+                        _SKCloudServiceSetupOptionsITunesItemIdentifierKey,
+                        _SKCloudServiceSetupOptionsMessageIdentifierKey,
+                        _SKDownloadTimeRemainingUnknown, _SKErrorDomain,
+                        _SKReceiptPropertyIsExpired, _SKReceiptPropertyIsRevoked,
+                        _SKReceiptPropertyIsVolumePurchase,
+                        _SKStoreProductParameterAdNetworkAttributionSignature,
+                        _SKStoreProductParameterAdNetworkCampaignIdentifier,
+                        _SKStoreProductParameterAdNetworkIdentifier,
+                        _SKStoreProductParameterAdNetworkNonce,
+                        _SKStoreProductParameterAdNetworkSourceAppStoreIdentifier,
+                        _SKStoreProductParameterAdNetworkSourceIdentifier,
+                        _SKStoreProductParameterAdNetworkTimestamp,
+                        _SKStoreProductParameterAdNetworkVersion,
+                        _SKStoreProductParameterAdvertisingPartnerToken,
+                        _SKStoreProductParameterAffiliateToken,
+                        _SKStoreProductParameterCampaignToken,
+                        _SKStoreProductParameterCustomProductPageIdentifier,
+                        _SKStoreProductParameterITunesItemIdentifier,
+                        _SKStoreProductParameterProductIdentifier,
+                        _SKStoreProductParameterProviderToken,
+                        _SKStorefrontCountryCodeDidChangeNotification,
+                        _SKStorefrontIdentifierDidChangeNotification,
+                        _SKTerminateForInvalidReceipt ]
+    objc-classes:     [ SKAdImpression, SKAdNetwork, SKArcadeService, SKCloudServiceController,
+                        SKCloudServiceSetupViewController, SKDownload, SKMutablePayment, SKOverlay,
+                        SKOverlayAppClipConfiguration, SKOverlayAppConfiguration,
+                        SKOverlayConfiguration, SKOverlayTransitionContext, SKPayment,
+                        SKPaymentDiscount, SKPaymentQueue, SKPaymentTransaction, SKProduct,
+                        SKProductDiscount, SKProductStorePromotionController,
+                        SKProductSubscriptionPeriod, SKProductsRequest, SKProductsResponse,
+                        SKReceiptRefreshRequest, SKRequest, SKStoreProductViewController,
+                        SKStoreReviewController, SKStorefront, XamarinSwiftFunctions ]
+...

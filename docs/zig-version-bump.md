@@ -4,7 +4,7 @@
 package version) has a **single source of truth**: the `<ZigVersion>` default in
 `src/ZigVersion.props`. Everything else derives from it:
 
-- `src/Crosscompile.targets` and `src/AotAnywhere.nuproj` `<Import>` it.
+- `src/ZigResolve.targets` (imported by `src/Crosscompile.targets`) and `src/AotAnywhere.nuproj` `<Import>` it.
 - `src/Sdk/Sdk.props` has it baked in at pack time (`BakeSdkProps` in the
   nuproj), because the default must be known during a consumer's very first
   restore — before the package's build targets are imported.

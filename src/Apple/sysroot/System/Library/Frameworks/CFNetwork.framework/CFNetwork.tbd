@@ -1,0 +1,47 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CFNetwork.framework/CFNetwork'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CFHTTPAuthenticationAppliesToRequest, _CFHTTPAuthenticationCopyMethod,
+                        _CFHTTPAuthenticationCreateFromResponse, _CFHTTPAuthenticationGetTypeID,
+                        _CFHTTPAuthenticationIsValid, _CFHTTPAuthenticationRequiresAccountDomain,
+                        _CFHTTPAuthenticationRequiresOrderedRequests,
+                        _CFHTTPAuthenticationRequiresUserNameAndPassword,
+                        _CFHTTPMessageAddAuthentication, _CFHTTPMessageAppendBytes,
+                        _CFHTTPMessageApplyCredentialDictionary, _CFHTTPMessageApplyCredentials,
+                        _CFHTTPMessageCopyAllHeaderFields, _CFHTTPMessageCopyResponseStatusLine,
+                        _CFHTTPMessageCopyVersion, _CFHTTPMessageCreateEmpty,
+                        _CFHTTPMessageCreateRequest, _CFHTTPMessageGetResponseStatusCode,
+                        _CFHTTPMessageGetTypeID, _CFHTTPMessageIsHeaderComplete,
+                        _CFHTTPMessageIsRequest, _CFHTTPMessageSetBody,
+                        _CFHTTPMessageSetHeaderFieldValue, _CFHostCreateWithAddress,
+                        _CFHostCreateWithName, _CFNetworkCopyProxiesForAutoConfigurationScript,
+                        _CFNetworkCopyProxiesForURL, _CFNetworkCopySystemProxySettings,
+                        _CFNetworkExecuteProxyAutoConfigurationScript,
+                        _CFNetworkExecuteProxyAutoConfigurationURL,
+                        _CFReadStreamCreateForHTTPRequest,
+                        _CFReadStreamCreateForStreamedHTTPRequest,
+                        _CFStreamCreatePairWithSocketToCFHost, _kCFErrorDomainCFNetwork,
+                        _kCFHTTPAuthenticationAccountDomain, _kCFHTTPAuthenticationPassword,
+                        _kCFHTTPAuthenticationSchemeBasic, _kCFHTTPAuthenticationSchemeDigest,
+                        _kCFHTTPAuthenticationSchemeNTLM, _kCFHTTPAuthenticationSchemeNegotiate,
+                        _kCFHTTPAuthenticationUsername, _kCFHTTPVersion1_0, _kCFHTTPVersion1_1,
+                        _kCFHTTPVersion2_0, _kCFHTTPVersion3_0, _kCFNetworkProxiesHTTPPort,
+                        _kCFNetworkProxiesHTTPProxy, _kCFNetworkProxiesProxyAutoConfigEnable,
+                        _kCFNetworkProxiesProxyAutoConfigJavaScript,
+                        _kCFNetworkProxiesProxyAutoConfigURLString,
+                        _kCFProxyAutoConfigurationHTTPResponseKey,
+                        _kCFProxyAutoConfigurationJavaScriptKey, _kCFProxyAutoConfigurationURLKey,
+                        _kCFProxyHostNameKey, _kCFProxyPasswordKey, _kCFProxyPortNumberKey,
+                        _kCFProxyTypeAutoConfigurationJavaScript, _kCFProxyTypeAutoConfigurationURL,
+                        _kCFProxyTypeFTP, _kCFProxyTypeHTTP, _kCFProxyTypeHTTPS, _kCFProxyTypeKey,
+                        _kCFProxyTypeNone, _kCFProxyTypeSOCKS, _kCFProxyUsernameKey,
+                        _kCFStreamPropertyHTTPAttemptPersistentConnection,
+                        _kCFStreamPropertyHTTPFinalRequest, _kCFStreamPropertyHTTPFinalURL,
+                        _kCFStreamPropertyHTTPProxy, _kCFStreamPropertyHTTPRequestBytesWrittenCount,
+                        _kCFStreamPropertyHTTPResponseHeader,
+                        _kCFStreamPropertyHTTPShouldAutoredirect ]
+...

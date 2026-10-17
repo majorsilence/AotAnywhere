@@ -1,0 +1,14 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/ReplayKit.framework/ReplayKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _RPApplicationInfoBundleIdentifierKey, _RPRecordingErrorDomain,
+                        _RPVideoSampleOrientationKey ]
+    objc-classes:     [ RPBroadcastActivityViewController, RPBroadcastConfiguration,
+                        RPBroadcastController, RPBroadcastHandler, RPBroadcastMP4ClipHandler,
+                        RPBroadcastSampleHandler, RPPreviewViewController, RPScreenRecorder,
+                        RPSystemBroadcastPickerView ]
+...

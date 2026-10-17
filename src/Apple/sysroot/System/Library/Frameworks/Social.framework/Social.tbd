@@ -1,0 +1,12 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Social.framework/Social'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _SLServiceTypeFacebook, _SLServiceTypeSinaWeibo, _SLServiceTypeTencentWeibo,
+                        _SLServiceTypeTwitter ]
+    objc-classes:     [ SLComposeServiceViewController, SLComposeSheetConfigurationItem,
+                        SLComposeViewController, SLRequest ]
+...

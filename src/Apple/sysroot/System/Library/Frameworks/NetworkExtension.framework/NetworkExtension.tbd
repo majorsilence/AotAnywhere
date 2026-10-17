@@ -1,0 +1,44 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/NetworkExtension.framework/NetworkExtension'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _NEAppProxyErrorDomain, _NEAppPushErrorDomain,
+                        _NEDNSProxyConfigurationDidChangeNotification, _NEDNSProxyErrorDomain,
+                        _NEDNSSettingsConfigurationDidChangeNotification, _NEDNSSettingsErrorDomain,
+                        _NEFilterConfigurationDidChangeNotification, _NEFilterErrorDomain,
+                        _NEFilterProviderRemediationMapRemediationButtonTexts,
+                        _NEFilterProviderRemediationMapRemediationURLs,
+                        _NEHotspotConfigurationErrorDomain, _NERelayClientErrorDomain,
+                        _NERelayConfigurationDidChangeNotification, _NERelayErrorDomain,
+                        _NETunnelProviderErrorDomain, _NEVPNConfigurationChangeNotification,
+                        _NEVPNConnectionErrorDomain, _NEVPNConnectionStartOptionPassword,
+                        _NEVPNConnectionStartOptionUsername, _NEVPNErrorDomain,
+                        _NEVPNStatusDidChangeNotification, _kNEHotspotHelperOptionDisplayName ]
+    objc-classes:     [ NEAppProxyFlow, NEAppProxyProvider, NEAppProxyProviderManager,
+                        NEAppProxyTCPFlow, NEAppProxyUDPFlow, NEAppPushManager, NEAppPushProvider,
+                        NEAppRule, NEDNSOverHTTPSSettings, NEDNSOverTLSSettings, NEDNSProxyManager,
+                        NEDNSProxyProvider, NEDNSProxyProviderProtocol, NEDNSSettings,
+                        NEDNSSettingsManager, NEEvaluateConnectionRule, NEFilterBrowserFlow,
+                        NEFilterControlProvider, NEFilterControlVerdict, NEFilterDataProvider,
+                        NEFilterDataVerdict, NEFilterFlow, NEFilterManager, NEFilterNewFlowVerdict,
+                        NEFilterProvider, NEFilterProviderConfiguration, NEFilterRemediationVerdict,
+                        NEFilterReport, NEFilterSocketFlow, NEFilterVerdict, NEFlowMetaData,
+                        NEHotspotConfiguration, NEHotspotConfigurationManager, NEHotspotEAPSettings,
+                        NEHotspotHS20Settings, NEHotspotHelper, NEHotspotHelperCommand,
+                        NEHotspotHelperResponse, NEHotspotNetwork, NEIPv4Route, NEIPv4Settings,
+                        NEIPv6Route, NEIPv6Settings, NEOnDemandRule, NEOnDemandRuleConnect,
+                        NEOnDemandRuleDisconnect, NEOnDemandRuleEvaluateConnection,
+                        NEOnDemandRuleIgnore, NEPacket, NEPacketTunnelFlow,
+                        NEPacketTunnelNetworkSettings, NEPacketTunnelProvider, NEPrivateLTENetwork,
+                        NEProvider, NEProxyServer, NEProxySettings, NERelay, NERelayManager,
+                        NETunnelNetworkSettings, NETunnelProvider, NETunnelProviderManager,
+                        NETunnelProviderProtocol, NETunnelProviderSession, NEURLFilter,
+                        NEVPNConnection, NEVPNIKEv2PPKConfiguration,
+                        NEVPNIKEv2SecurityAssociationParameters, NEVPNManager, NEVPNProtocol,
+                        NEVPNProtocolIKEv2, NEVPNProtocolIPSec, NWBonjourServiceEndpoint,
+                        NWEndpoint, NWHostEndpoint, NWPath, NWTCPConnection, NWTLSParameters,
+                        NWUDPSession ]
+...

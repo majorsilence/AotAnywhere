@@ -1,0 +1,49 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreBluetooth.framework/CoreBluetooth'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CBATTErrorDomain, _CBAdvertisementDataIsConnectable,
+                        _CBAdvertisementDataLocalNameKey, _CBAdvertisementDataManufacturerDataKey,
+                        _CBAdvertisementDataOverflowServiceUUIDsKey,
+                        _CBAdvertisementDataServiceDataKey, _CBAdvertisementDataServiceUUIDsKey,
+                        _CBAdvertisementDataSolicitedServiceUUIDsKey,
+                        _CBAdvertisementDataTxPowerLevelKey,
+                        _CBCentralManagerOptionDeviceAccessForMedia,
+                        _CBCentralManagerOptionRestoreIdentifierKey,
+                        _CBCentralManagerOptionShowPowerAlertKey,
+                        _CBCentralManagerRestoredStatePeripheralsKey,
+                        _CBCentralManagerRestoredStateScanOptionsKey,
+                        _CBCentralManagerRestoredStateScanServicesKey,
+                        _CBCentralManagerScanOptionAllowDuplicatesKey,
+                        _CBCentralManagerScanOptionSolicitedServiceUUIDsKey,
+                        _CBConnectPeripheralOptionEnableAutoReconnect,
+                        _CBConnectPeripheralOptionEnableTransportBridgingKey,
+                        _CBConnectPeripheralOptionNotifyOnConnectionKey,
+                        _CBConnectPeripheralOptionNotifyOnDisconnectionKey,
+                        _CBConnectPeripheralOptionNotifyOnNotificationKey,
+                        _CBConnectPeripheralOptionRequiresANCS,
+                        _CBConnectPeripheralOptionStartDelayKey,
+                        _CBConnectionEventMatchingOptionPeripheralUUIDs,
+                        _CBConnectionEventMatchingOptionServiceUUIDs, _CBErrorDomain,
+                        _CBPeripheralManagerOptionRestoreIdentifierKey,
+                        _CBPeripheralManagerOptionShowPowerAlertKey,
+                        _CBPeripheralManagerRestoredStateAdvertisementDataKey,
+                        _CBPeripheralManagerRestoredStateServicesKey,
+                        _CBUUIDCharacteristicAggregateFormatString,
+                        _CBUUIDCharacteristicExtendedPropertiesString,
+                        _CBUUIDCharacteristicFormatString,
+                        _CBUUIDCharacteristicObservationScheduleString,
+                        _CBUUIDCharacteristicUserDescriptionString,
+                        _CBUUIDCharacteristicValidRangeString,
+                        _CBUUIDClientCharacteristicConfigurationString,
+                        _CBUUIDL2CAPPSMCharacteristicString,
+                        _CBUUIDServerCharacteristicConfigurationString ]
+    objc-classes:     [ CBATTRequest, CBAttribute, CBCentral, CBCentralManager,
+                        CBChannelSoundingProcedureResults, CBChannelSoundingSessionConfiguration,
+                        CBCharacteristic, CBDescriptor, CBL2CAPChannel, CBManager,
+                        CBMutableCharacteristic, CBMutableDescriptor, CBMutableService, CBPeer,
+                        CBPeripheral, CBPeripheralManager, CBService, CBUUID ]
+...

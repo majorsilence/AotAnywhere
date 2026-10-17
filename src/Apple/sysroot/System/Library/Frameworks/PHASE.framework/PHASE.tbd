@@ -1,0 +1,36 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/PHASE.framework/PHASE'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _PHASEAssetErrorDomain, _PHASEErrorDomain, _PHASESoundEventErrorDomain,
+                        _PHASESpatialCategoryDirectPathTransmission,
+                        _PHASESpatialCategoryEarlyReflections, _PHASESpatialCategoryLateReverb ]
+    objc-classes:     [ PHASEAmbientMixerDefinition, PHASEAsset, PHASEAssetRegistry,
+                        PHASEBlendNodeDefinition, PHASECardioidDirectivityModelParameters,
+                        PHASECardioidDirectivityModelSubbandParameters, PHASEChannelMixerDefinition,
+                        PHASEConeDirectivityModelParameters,
+                        PHASEConeDirectivityModelSubbandParameters, PHASEContainerNodeDefinition,
+                        PHASEDefinition, PHASEDirectivityModelParameters,
+                        PHASEDistanceModelFadeOutParameters, PHASEDistanceModelParameters,
+                        PHASEDucker, PHASEEngine, PHASEEnvelope,
+                        PHASEEnvelopeDistanceModelParameters, PHASEEnvelopeSegment,
+                        PHASEGeneratorNodeDefinition,
+                        PHASEGeometricSpreadingDistanceModelParameters,
+                        PHASEGlobalMetaParameterAsset, PHASEGroup, PHASEGroupPreset,
+                        PHASEGroupPresetSetting, PHASEListener, PHASEMappedMetaParameterDefinition,
+                        PHASEMaterial, PHASEMedium, PHASEMetaParameter,
+                        PHASEMetaParameterDefinition, PHASEMixer, PHASEMixerDefinition,
+                        PHASEMixerParameters, PHASENumberMetaParameter,
+                        PHASENumberMetaParameterDefinition, PHASENumericPair, PHASEObject,
+                        PHASEOccluder, PHASEPullStreamNode, PHASEPullStreamNodeDefinition,
+                        PHASEPushStreamNode, PHASEPushStreamNodeDefinition,
+                        PHASERandomNodeDefinition, PHASESamplerNodeDefinition, PHASEShape,
+                        PHASEShapeElement, PHASESoundAsset, PHASESoundEvent,
+                        PHASESoundEventNodeAsset, PHASESoundEventNodeDefinition, PHASESource,
+                        PHASESpatialMixerDefinition, PHASESpatialPipeline,
+                        PHASESpatialPipelineEntry, PHASEStreamNode, PHASEStringMetaParameter,
+                        PHASEStringMetaParameterDefinition, PHASESwitchNodeDefinition ]
+...

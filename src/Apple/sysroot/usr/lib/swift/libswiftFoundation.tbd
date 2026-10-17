@@ -1,0 +1,16 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/usr/lib/swift/libswiftFoundation.dylib'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ '_$s10Foundation21NSKeyValueObservationC10invalidateyyFTj',
+                        '_$s10Foundation21NSKeyValueObservationCMn',
+                        '_$s10Foundation27_KeyValueCodingAndObservingPAAE7observe_7options13changeHandlerAA05NSKeyC11ObservationCs0B4PathCyxqd__G_So0kcF7OptionsVyx_AA0kC14ObservedChangeVyqd__GtctlF',
+                        '_$s10Foundation4DataV9copyBytes2to4fromSiSryxG_SnySiGSgtlF',
+                        '_$s10Foundation4DataVN', '_$s10Foundation4DataVSTAAMc',
+                        '_$s10Foundation4DataVyACxcSTRzs5UInt8V7ElementRtzlufC',
+                        '_$sSo8NSObjectC10Foundation27_KeyValueCodingAndObservingACWP',
+                        '__swift_FORCE_LOAD_$_swiftFoundation' ]
+...

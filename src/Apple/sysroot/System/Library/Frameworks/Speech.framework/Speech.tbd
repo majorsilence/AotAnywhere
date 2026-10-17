@@ -1,0 +1,15 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Speech.framework/Speech'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _SFSpeechErrorDomain ]
+    objc-classes:     [ SFAcousticFeature, SFSpeechAudioBufferRecognitionRequest,
+                        SFSpeechLanguageModel, SFSpeechLanguageModelConfiguration,
+                        SFSpeechRecognitionMetadata, SFSpeechRecognitionRequest,
+                        SFSpeechRecognitionResult, SFSpeechRecognitionTask, SFSpeechRecognizer,
+                        SFSpeechURLRecognitionRequest, SFTranscription, SFTranscriptionSegment,
+                        SFVoiceAnalytics ]
+...

@@ -1,0 +1,13 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/ExternalAccessory.framework/ExternalAccessory'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _EAAccessoryDidConnectNotification, _EAAccessoryDidDisconnectNotification,
+                        _EAAccessoryKey, _EAAccessorySelectedKey,
+                        _EABluetoothAccessoryPickerErrorDomain ]
+    objc-classes:     [ EAAccessory, EAAccessoryManager, EASession, EAWiFiUnconfiguredAccessory,
+                        EAWiFiUnconfiguredAccessoryBrowser ]
+...

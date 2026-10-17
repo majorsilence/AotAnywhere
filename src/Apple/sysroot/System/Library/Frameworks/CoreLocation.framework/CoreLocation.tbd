@@ -1,0 +1,22 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/CoreLocation.framework/CoreLocation'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CLLocationCoordinate2DIsValid, _CLLocationDistanceMax,
+                        _CLLocationPushServiceErrorDomain, _CLTimeIntervalMax,
+                        _kCLDistanceFilterNone, _kCLErrorDomain,
+                        _kCLErrorUserInfoAlternateRegionKey, _kCLLocationAccuracyBest,
+                        _kCLLocationAccuracyBestForNavigation, _kCLLocationAccuracyHundredMeters,
+                        _kCLLocationAccuracyKilometer, _kCLLocationAccuracyNearestTenMeters,
+                        _kCLLocationAccuracyReduced, _kCLLocationAccuracyThreeKilometers ]
+    objc-classes:     [ CLBackgroundActivitySession, CLBackgroundActivitySessionDiagnostic,
+                        CLBeacon, CLBeaconIdentityCondition, CLBeaconIdentityConstraint,
+                        CLBeaconRegion, CLCircularGeographicCondition, CLCircularRegion,
+                        CLCondition, CLFloor, CLGeocoder, CLHeading, CLLocation, CLLocationManager,
+                        CLLocationSourceInformation, CLLocationUpdater, CLMonitor,
+                        CLMonitorConfiguration, CLMonitoringEvent, CLMonitoringRecord, CLPlacemark,
+                        CLRegion, CLServiceSession, CLServiceSessionDiagnostic, CLUpdate, CLVisit ]
+...

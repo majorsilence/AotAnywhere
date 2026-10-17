@@ -1,0 +1,19 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/GLKit.framework/GLKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _GLKTextureLoaderApplyPremultiplication, _GLKTextureLoaderErrorDomain,
+                        _GLKTextureLoaderErrorKey, _GLKTextureLoaderGLErrorKey,
+                        _GLKTextureLoaderGenerateMipmaps, _GLKTextureLoaderGrayscaleAsAlpha,
+                        _GLKTextureLoaderOriginBottomLeft, _GLKTextureLoaderSRGB,
+                        _GLKVertexAttributeParametersFromModelIO, _kGLKModelErrorDomain,
+                        _kGLKModelErrorKey ]
+    objc-classes:     [ GLKBaseEffect, GLKEffectProperty, GLKEffectPropertyFog,
+                        GLKEffectPropertyLight, GLKEffectPropertyMaterial, GLKEffectPropertyTexture,
+                        GLKEffectPropertyTransform, GLKMesh, GLKMeshBuffer, GLKMeshBufferAllocator,
+                        GLKReflectionMapEffect, GLKSkyboxEffect, GLKSubmesh, GLKTextureInfo,
+                        GLKTextureLoader, GLKView, GLKViewController ]
+...

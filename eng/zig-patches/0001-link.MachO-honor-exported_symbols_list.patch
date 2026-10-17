@@ -1,0 +1,292 @@
+From 21f24efcbc5d41f31d2f1e072c972b2549c4456f Mon Sep 17 00:00:00 2001
+From: Peter Gill <peter@majorsilence.com>
+Date: Mon, 12 Oct 2026 14:06:40 -0230
+Subject: [PATCH] link.MachO: honor -exported_symbols_list and -exported_symbol
+
+zig cc parsed -exported_symbols_list into the wasm export-name list, which
+the Mach-O linker never reads, so every defined global stayed exported.
+Carry the list to the MachO linker as macho_exported_symbols (null when no
+list was given; an empty list such as /dev/null exports nothing) and, as
+ld64 does, make globals that do not match it private extern so they stay
+out of the export trie and -x can strip them. Matching follows ld64: plain
+names, '*', '?' and '[...]' wildcards; '#' comments and surrounding
+whitespace in the list file are ignored. Linker-synthesized symbols are
+exempt. Also accept -exported_symbol <name>.
+
+Also keep N_PEXT on a common symbol when converting it to a definition:
+convertTentativeDefinitions forced every common to global, so a
+private-extern common was exported.
+
+Not for upstream: Zig does not accept LLM-authored patches.
+---
+ src/Compilation.zig       |  7 +++
+ src/link.zig              |  3 ++
+ src/link/MachO.zig        | 94 +++++++++++++++++++++++++++++++++++++++
+ src/link/MachO/Object.zig |  8 +++-
+ src/link/MachO/file.zig   | 12 ++++-
+ src/main.zig              | 17 ++++++-
+ 6 files changed, 137 insertions(+), 4 deletions(-)
+
+diff --git a/src/Compilation.zig b/src/Compilation.zig
+index 309ed5d32c..4e36a44909 100644
+--- a/src/Compilation.zig
++++ b/src/Compilation.zig
+@@ -1587,6 +1587,10 @@ pub const CreateOptions = struct {
+     install_name: ?[]const u8 = null,
+     /// (Darwin) Path to entitlements file
+     entitlements: ?Cache.Path = null,
++    /// (Darwin) Symbols (or ld64 wildcard patterns) to export, from
++    /// -exported_symbols_list / -exported_symbol. Globals not matched are
++    /// made private extern. null exports every global.
++    macho_exported_symbols: ?[]const []const u8 = null,
+     /// (Darwin) size of the __PAGEZERO segment
+     pagezero_size: ?u64 = null,
+     /// (Darwin) set minimum space for future expansion of the load commands
+@@ -2249,6 +2253,7 @@ pub fn create(gpa: Allocator, arena: Allocator, io: Io, diag: *CreateDiagnostic,
+             .enable_link_snapshots = options.enable_link_snapshots,
+             .install_name = options.install_name,
+             .entitlements = options.entitlements,
++            .macho_exported_symbols = options.macho_exported_symbols,
+             .pagezero_size = options.pagezero_size,
+             .headerpad_size = options.headerpad_size,
+             .headerpad_max_install_names = options.headerpad_max_install_names,
+@@ -3482,6 +3487,8 @@ fn addNonIncrementalStuffToCacheManifest(comp: *Compilation, man: *Cache.Manifes
+ 
+     // Mach-O specific stuff
+     try man.addInputPathOptional(opts.entitlements, .{});
++    man.hash.add(opts.macho_exported_symbols != null);
++    if (opts.macho_exported_symbols) |list| man.hash.addListOfBytes(list);
+     man.hash.addOptional(opts.pagezero_size);
+     man.hash.addOptional(opts.headerpad_size);
+     man.hash.add(opts.headerpad_max_install_names);
+diff --git a/src/link.zig b/src/link.zig
+index be4505c462..2f1ed5733a 100644
+--- a/src/link.zig
++++ b/src/link.zig
+@@ -492,6 +492,9 @@ pub const File = struct {
+         install_name: ?[]const u8,
+         /// Path to entitlements file
+         entitlements: ?Path,
++        /// Symbols (or ld64 wildcard patterns) to export; globals not
++        /// matched are made private extern. null exports every global.
++        macho_exported_symbols: ?[]const []const u8,
+         /// size of the __PAGEZERO segment
+         pagezero_size: ?u64,
+         /// Set minimum space for future expansion of the load commands
+diff --git a/src/link/MachO.zig b/src/link/MachO.zig
+index eb3e6d0543..4a9b49383b 100644
+--- a/src/link/MachO.zig
++++ b/src/link/MachO.zig
+@@ -124,6 +124,10 @@ lib_directories: []const Directory,
+ install_name: ?[]const u8,
+ /// Path to entitlements file.
+ entitlements: ?Path,
++/// Symbols (or ld64 wildcard patterns) to export, from -exported_symbols_list
++/// and -exported_symbol. Globals not matched are made private extern, as with
++/// ld64. null exports every global.
++exported_symbols: ?[]const []const u8,
+ compatibility_version: ?std.SemanticVersion,
+ /// Entry name
+ entry_name: ?[]const u8,
+@@ -194,6 +198,7 @@ pub fn createEmpty(
+         .dead_strip_dylibs = options.dead_strip_dylibs,
+         .install_name = options.install_name,
+         .entitlements = options.entitlements,
++        .exported_symbols = options.macho_exported_symbols,
+         .compatibility_version = options.compatibility_version,
+         .entry_name = switch (options.entry) {
+             .disabled => null,
+@@ -1292,6 +1297,95 @@ pub fn dedupLiterals(self: *MachO) !void {
+     }
+ }
+ 
++/// Whether a global defined in the output may be exported, per
++/// -exported_symbols_list / -exported_symbol. Always true when no list was
++/// given.
++pub fn isExportAllowed(self: *const MachO, name: []const u8) bool {
++    const list = self.exported_symbols orelse return true;
++    for (list) |pattern| {
++        if (matchExportPattern(pattern, name)) return true;
++    }
++    return false;
++}
++
++/// ld64 exported-symbols-list matching: a plain name matches exactly, and
++/// '*', '?' and '[...]' (with ranges, no negation) are wildcards.
++fn matchExportPattern(pattern: []const u8, name: []const u8) bool {
++    if (mem.indexOfAny(u8, pattern, "*?[") == null) return mem.eql(u8, pattern, name);
++    var p: usize = 0;
++    var n: usize = 0;
++    // Backtracking point for the last '*': pattern index after it, and the
++    // name index it currently stops at.
++    var star_p: ?usize = null;
++    var star_n: usize = 0;
++    while (n < name.len) {
++        if (p < pattern.len) switch (pattern[p]) {
++            '*' => {
++                star_p = p + 1;
++                star_n = n;
++                p += 1;
++                continue;
++            },
++            '?' => {
++                p += 1;
++                n += 1;
++                continue;
++            },
++            '[' => if (matchBracket(pattern[p..], name[n])) |len| {
++                p += len;
++                n += 1;
++                continue;
++            },
++            else => |c| if (c == name[n]) {
++                p += 1;
++                n += 1;
++                continue;
++            },
++        };
++        const sp = star_p orelse return false;
++        star_n += 1;
++        p = sp;
++        n = star_n;
++    }
++    while (p < pattern.len and pattern[p] == '*') p += 1;
++    return p == pattern.len;
++}
++
++/// Matches `c` against the bracket expression at the start of `pattern`.
++/// Returns the expression's length on a match, null otherwise (including an
++/// unterminated '[', which then cannot match anything).
++fn matchBracket(pattern: []const u8, c: u8) ?usize {
++    assert(pattern[0] == '[');
++    var i: usize = 1;
++    var matched = false;
++    while (i < pattern.len and pattern[i] != ']') {
++        if (i + 2 < pattern.len and pattern[i + 1] == '-' and pattern[i + 2] != ']') {
++            if (c >= pattern[i] and c <= pattern[i + 2]) matched = true;
++            i += 3;
++        } else {
++            if (c == pattern[i]) matched = true;
++            i += 1;
++        }
++    }
++    if (i == pattern.len) return null;
++    return if (matched) i + 1 else null;
++}
++
++test matchExportPattern {
++    const t = std.testing;
++    try t.expect(matchExportPattern("_hello_add", "_hello_add"));
++    try t.expect(!matchExportPattern("_hello_add", "_hello_add2"));
++    try t.expect(matchExportPattern("_Globalization*", "_GlobalizationNative_GetLocales"));
++    try t.expect(!matchExportPattern("_Globalization*", "_SystemNative_Read"));
++    try t.expect(matchExportPattern("_a?c", "_abc"));
++    try t.expect(!matchExportPattern("_a?c", "_ac"));
++    try t.expect(matchExportPattern("*_end", "_managedcode_end"));
++    try t.expect(matchExportPattern("_[a-c]x*", "_bxyz"));
++    try t.expect(!matchExportPattern("_[a-c]x*", "_dxyz"));
++    try t.expect(matchExportPattern("*", ""));
++    try t.expect(!matchExportPattern("_[ab", "_a"));
++}
++
+ fn claimUnresolved(self: *MachO) void {
+     if (self.getZigObject()) |zo| {
+         zo.asFile().claimUnresolved(self);
+diff --git a/src/link/MachO/Object.zig b/src/link/MachO/Object.zig
+index 3c45dc419d..4b327794e2 100644
+--- a/src/link/MachO/Object.zig
++++ b/src/link/MachO/Object.zig
+@@ -1688,15 +1688,19 @@ pub fn convertTentativeDefinitions(self: *Object, macho_file: *MachO) !void {
+         sect.size = nlist.n_value;
+         sect.@"align" = alignment;
+ 
++        // A private-extern common (N_PEXT, e.g. from -fvisibility=hidden or
++        // a demoted object) stays hidden once defined, as with ld64.
++        const pext = nlist.n_type.bits.pext or self.hidden;
++
+         sym.value = 0;
+         sym.atom_ref = .{ .index = atom_index, .file = self.index };
+         sym.flags.weak = false;
+         sym.flags.weak_ref = false;
+         sym.flags.tentative = false;
+-        sym.visibility = .global;
++        sym.visibility = if (pext) .hidden else .global;
+ 
+         nlist.n_value = 0;
+-        nlist.n_type = .{ .bits = .{ .ext = true, .type = .sect, .pext = false, .is_stab = 0 } };
++        nlist.n_type = .{ .bits = .{ .ext = true, .type = .sect, .pext = pext, .is_stab = 0 } };
+         nlist.n_sect = 0;
+         nlist.n_desc = @bitCast(@as(u16, 0));
+         nlist_atom.* = atom_index;
+diff --git a/src/link/MachO/file.zig b/src/link/MachO/file.zig
+index ddd308ee20..11b503b6ff 100644
+--- a/src/link/MachO/file.zig
++++ b/src/link/MachO/file.zig
+@@ -134,7 +134,17 @@ pub const File = union(enum) {
+                 continue;
+             }
+             if (file.getIndex() == ref.file) {
+-                sym.flags.@"export" = true;
++                // Linker-synthesized symbols (__mh_execute_header and
++                // friends) are not subject to the list.
++                if (file == .internal or macho_file.isExportAllowed(sym.getName(macho_file))) {
++                    sym.flags.@"export" = true;
++                } else {
++                    // Not on the -exported_symbols_list: keep it resolvable
++                    // within the link but emit it private extern, as ld64
++                    // does, so it stays out of the export trie and -x can
++                    // strip it.
++                    sym.visibility = .hidden;
++                }
+             }
+         }
+     }
+diff --git a/src/main.zig b/src/main.zig
+index 7d9d7e8ef5..11f5226c62 100644
+--- a/src/main.zig
++++ b/src/main.zig
+@@ -1046,6 +1046,9 @@ fn buildOutputType(
+     var rc_includes: std.zig.RcIncludes = .any;
+     var manifest_file: ?[]const u8 = null;
+     var linker_export_symbol_names: std.ArrayList([]const u8) = .empty;
++    // (Darwin) -exported_symbols_list / -exported_symbol. null means no list
++    // was given; an empty list (e.g. /dev/null) exports nothing.
++    var macho_exported_symbols: ?std.ArrayList([]const u8) = null;
+     var build_root_path: ?[]const u8 = null;
+ 
+     // Tracks the position in c_source_files which have already their owner populated.
+@@ -2791,11 +2794,22 @@ fn buildOutputType(
+                     const content = Io.Dir.cwd().readFileAlloc(io, exported_symbols_list, arena, .limited(10 * 1024 * 1024)) catch |err| {
+                         fatal("unable to read exported symbols list {q}: {t}", .{ exported_symbols_list, err });
+                     };
++                    if (macho_exported_symbols == null) macho_exported_symbols = .empty;
+                     var symbols_it = mem.splitScalar(u8, content, '\n');
+-                    while (symbols_it.next()) |line| {
++                    while (symbols_it.next()) |raw_line| {
++                        // ld64 syntax: one symbol (or wildcard pattern) per
++                        // line, '#' starts a comment, surrounding whitespace
++                        // is ignored.
++                        const no_comment = if (mem.indexOfScalar(u8, raw_line, '#')) |i| raw_line[0..i] else raw_line;
++                        const line = mem.trim(u8, no_comment, " \t\r");
+                         if (line.len == 0) continue;
+                         try linker_export_symbol_names.append(arena, line);
++                        try macho_exported_symbols.?.append(arena, line);
+                     }
++                } else if (mem.eql(u8, arg, "-exported_symbol")) {
++                    const name = linker_args_it.nextOrFatal();
++                    if (macho_exported_symbols == null) macho_exported_symbols = .empty;
++                    try macho_exported_symbols.?.append(arena, name);
+                 } else if (mem.eql(u8, arg, "--compress-debug-sections")) {
+                     const arg1 = linker_args_it.nextOrFatal();
+                     linker_compress_debug_sections = stringToEnum(std.zig.CompressDebugSections, arg1) orelse {
+@@ -3749,6 +3763,7 @@ fn buildOutputType(
+         .enable_link_snapshots = enable_link_snapshots,
+         .install_name = install_name,
+         .entitlements = if (entitlements) |p| .initCwd(p) else null,
++        .macho_exported_symbols = if (macho_exported_symbols) |list| list.items else null,
+         .pagezero_size = pagezero_size,
+         .headerpad_size = headerpad_size,
+         .headerpad_max_install_names = headerpad_max_install_names,
+-- 
+2.53.0
+

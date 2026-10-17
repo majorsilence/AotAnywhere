@@ -10,7 +10,7 @@ namespace AotAnywhere.MSBuild.Tests;
 // restore, no linking - pure MSBuild evaluation/execution.
 internal static class Harness
 {
-    static readonly string RepoRoot = FindRepoRoot();
+    public static readonly string RepoRoot = FindRepoRoot();
     static readonly string SrcDir =
         Path.Combine(RepoRoot, "src") + Path.DirectorySeparatorChar;
     static readonly string HarnessProj =

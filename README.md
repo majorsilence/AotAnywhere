@@ -73,6 +73,7 @@ handles that itself, no LLVM install needed).
 | **Linux** | `linux-x64`, `linux-arm64`, `linux-arm`, `linux-musl-x64`, `linux-musl-arm64`, `linux-musl-arm` | glibc and musl. The `arm`/ARMv7 RIDs require a `net9.0`+ target framework. |
 | **macOS** | `osx-x64`, `osx-arm64` | Links against bundled Apple linker stubs. See [macOS targets](docs/macos-targets.md). |
 | **Windows** | `win-x64`, `win-arm64` | From Linux/macOS hosts, via zig's MinGW-w64 import libraries. On a Windows host the SDK links these natively with MSVC. See [Windows targets](docs/windows-targets.md). |
+| **iOS** (experimental) | `ios-arm64`, `iossimulator-arm64` | Separate package, `StuDev.AotAnywhere.Apple`, for `net*-ios` NativeAOT apps. **Local development builds only** — see below and [iOS targets](docs/ios-targets.md). |
 
 ## Things to be aware of
 
@@ -85,6 +86,21 @@ handles that itself, no LLVM install needed).
   unsigned). To hand it to other people you must sign it with a Developer ID
   certificate and notarize it — both doable from any host, no Mac required. See
   [Signing and notarizing](docs/macos-targets.md#signing-and-notarizing).
+
+- **iOS builds are for local development only — not for the App Store.** The
+  experimental `StuDev.AotAnywhere.Apple` package builds `net*-ios` apps without
+  Xcode so you can run them in the simulator or on your own devices. It is not a
+  supported way to produce App Store or TestFlight builds: submissions are
+  expected to be built with Apple's Xcode, and building, signing and uploading
+  apps for distribution is out of scope. Use a Mac with Xcode (or a hosted macOS
+  build service) for anything you ship. Storyboards and XIBs (common views and
+  controls, table and collection views, constraints, outlets, actions and tap
+  gestures, navigation and tab bar controllers, segues and storyboard references)
+  and asset catalogs (app icons; PNG, PDF and SVG images; colours; data; dark-mode
+  variants) are compiled by built-in
+  replacements for Apple's `ibtool` and `actool`; [iOS targets](docs/ios-targets.md)
+  lists what is covered. A project
+  that uses anything else those tools handle stops with an error naming the item.
 
 - **Windows output skips some MSVC hardening.** Control Flow Guard and CET
   markers (`/CETCOMPAT`) are not carried over. For maximum-hardening release
@@ -202,6 +218,8 @@ Things to know:
 
 - [macOS targets](docs/macos-targets.md) — Apple linker stubs, and signing &
   notarizing for distribution
+- [iOS targets](docs/ios-targets.md) — the experimental `StuDev.AotAnywhere.Apple` package,
+  device signing without a Keychain, and supported storyboard/asset catalog features
 - [Windows targets](docs/windows-targets.md) — how win-x64/win-arm64 cross-linking works
 - [Advanced configuration](docs/advanced-configuration.md) — how linking works
   (MSBuild takeovers + managed tasks), and using your own Zig

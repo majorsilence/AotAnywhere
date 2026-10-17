@@ -1,0 +1,19 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/ClassKit.framework/ClassKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _CLSContextTopicArtsAndMusic, _CLSContextTopicComputerScienceAndEngineering,
+                        _CLSContextTopicHealthAndFitness, _CLSContextTopicLiteracyAndWriting,
+                        _CLSContextTopicMath, _CLSContextTopicScience,
+                        _CLSContextTopicSocialScience, _CLSContextTopicWorldLanguage,
+                        _CLSErrorCodeDomain, _CLSErrorObjectKey, _CLSErrorSuccessfulObjectsKey,
+                        _CLSErrorUnderlyingErrorsKey, _CLSPredicateKeyPathDateCreated,
+                        _CLSPredicateKeyPathIdentifier, _CLSPredicateKeyPathParent,
+                        _CLSPredicateKeyPathTitle, _CLSPredicateKeyPathTopic,
+                        _CLSPredicateKeyPathUniversalLinkURL ]
+    objc-classes:     [ CLSActivity, CLSActivityItem, CLSBinaryItem, CLSContext, CLSDataStore,
+                        CLSObject, CLSProgressReportingCapability, CLSQuantityItem, CLSScoreItem ]
+...

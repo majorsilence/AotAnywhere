@@ -1,0 +1,16 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/AccessorySetupKit.framework/AccessorySetupKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _ASErrorDomain, _ASPickerDisplaySettingsDiscoveryTimeoutLong,
+                        _ASPickerDisplaySettingsDiscoveryTimeoutMedium,
+                        _ASPickerDisplaySettingsDiscoveryTimeoutShort,
+                        _ASPickerDisplaySettingsDiscoveryTimeoutUnbounded ]
+    objc-classes:     [ ASAccessory, ASAccessoryEvent, ASAccessorySession, ASAccessorySettings,
+                        ASDiscoveredAccessory, ASDiscoveredDisplayItem, ASDiscoveryDescriptor,
+                        ASMigrationDisplayItem, ASPickerDisplayItem, ASPickerDisplaySettings,
+                        ASPropertyCompareString ]
+...

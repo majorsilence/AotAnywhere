@@ -42,6 +42,10 @@
       <Pack>true</Pack>
       <PackagePath>build</PackagePath>
     </None>
+    <None Include="ZigResolve.targets">
+      <Pack>true</Pack>
+      <PackagePath>build</PackagePath>
+    </None>
     <None Include="DirectLink.targets">
       <Pack>true</Pack>
       <PackagePath>build</PackagePath>

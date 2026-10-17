@@ -1,0 +1,19 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/Accelerate.framework/Accelerate'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _vImageBoxConvolve_ARGB8888, _vImageBoxConvolve_Planar8,
+                        _vImageConvolveMultiKernel_ARGB8888, _vImageConvolveMultiKernel_ARGBFFFF,
+                        _vImageConvolveWithBias_ARGB8888, _vImageConvolveWithBias_ARGBFFFF,
+                        _vImageConvolveWithBias_Planar8, _vImageConvolveWithBias_PlanarF,
+                        _vImageConvolve_ARGB8888, _vImageConvolve_ARGBFFFF, _vImageConvolve_Planar8,
+                        _vImageConvolve_PlanarF, _vImageMatrixMultiply_ARGB8888,
+                        _vImageRichardsonLucyDeConvolve_ARGB8888,
+                        _vImageRichardsonLucyDeConvolve_ARGBFFFF,
+                        _vImageRichardsonLucyDeConvolve_Planar8,
+                        _vImageRichardsonLucyDeConvolve_PlanarF, _vImageTentConvolve_ARGB8888,
+                        _vImageTentConvolve_Planar8 ]
+...

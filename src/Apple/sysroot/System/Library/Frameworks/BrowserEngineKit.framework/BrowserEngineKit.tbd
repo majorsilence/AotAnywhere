@@ -1,0 +1,23 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+install-name:    '/System/Library/Frameworks/BrowserEngineKit.framework/BrowserEngineKit'
+compatibility-version: 0.0.0
+exports:
+  - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
+    symbols:          [ _BEAccessibilitySelectionChangedNotification, _BEAccessibilityTraitMenuItem,
+                        _BEAccessibilityTraitPopUpButton, _BEAccessibilityTraitRadioButton,
+                        _BEAccessibilityTraitReadOnly, _BEAccessibilityTraitVisited,
+                        _BEAccessibilityValueChangedNotification ]
+    objc-classes:     [ BEAccessibilityRemoteElement, BEAccessibilityRemoteHostElement,
+                        BEAccessibilityTextMarker, BEAccessibilityTextMarkerRange,
+                        BEAutoFillTextSuggestion, BEContextMenuConfiguration, BEDownloadMonitor,
+                        BEDownloadMonitorLocation, BEDragInteraction, BEKeyEntry, BEKeyEntryContext,
+                        BELayerHierarchy, BELayerHierarchyHandle,
+                        BELayerHierarchyHostingTransactionCoordinator, BELayerHierarchyHostingView,
+                        BEMediaEnvironment, BENetworkingProcess, BEProcessCapability,
+                        BERenderingProcess, BEScrollView, BEScrollViewScrollUpdate,
+                        BETextAlternatives, BETextDocumentContext, BETextDocumentRequest,
+                        BETextInteraction, BETextSuggestion, BEWebAppManifest, BEWebContentFilter,
+                        BEWebContentProcess ]
+...
