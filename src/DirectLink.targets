@@ -53,6 +53,7 @@
   <UsingTask TaskName="AotAnywhere.Tasks.AotAnywhereWindowsLink" AssemblyFile="$(AotAnywhereTasksAssembly)" />
   <UsingTask TaskName="AotAnywhere.Tasks.AotAnywhereStrip" AssemblyFile="$(AotAnywhereTasksAssembly)" />
   <UsingTask TaskName="AotAnywhere.Tasks.AotAnywherePatchAppleObject" AssemblyFile="$(AotAnywhereTasksAssembly)" />
+  <UsingTask TaskName="AotAnywhere.Tasks.AotAnywhereDemoteAppleArchives" AssemblyFile="$(AotAnywhereTasksAssembly)" />
 
   <!-- Our zig cc lines carry no -O flag, so zig treats them as Debug builds
        and enables UBSan, which makes it compile its UBSan runtime for the
@@ -339,6 +340,16 @@
       <_MacStrip Include="-Wl,-S" />
     </ItemGroup>
 
+    <!-- Opt-in for a zig whose Mach-O linker honours -exported_symbols_list
+         (stock zig 0.17 parses it but ignores it). Passing the list lets the
+         linker hide what the N_PEXT surgery cannot reach - notably C common
+         symbols such as the ICU shim's u*_ptr pointers. The surgery still
+         runs, so a zig that ignores the list loses nothing. -->
+    <ItemGroup Condition="'$(AotAnywhereZigExportsList)' == 'true' and '$(_MacApplyExportsList)' == 'true'">
+      <_MacExportsListArg Include="-Wl,-exported_symbols_list,&quot;$(ExportsFile)&quot;" Condition="'$(ExportsFile)' != ''" />
+      <_MacExportsListArg Include="-Wl,-exported_symbols_list,/dev/null" Condition="'$(ExportsFile)' == ''" />
+    </ItemGroup>
+
     <!-- Final line: sysroot prefix, then the SDK's args (minus the drops),
          then the Swift overlays, then the GS-cookie pad source. -->
     <ItemGroup>
@@ -346,6 +357,7 @@
       <_MacLinkArg Include="@(_MacCore)" Exclude="@(_MacDrop)" />
       <_MacLinkArg Include="@(_MacSwiftOverlay)" />
       <_MacLinkArg Include="@(_MacStrip)" />
+      <_MacLinkArg Include="@(_MacExportsListArg)" />
       <_MacLinkArg Include="$(_AotAnywhereZigNoSanitizeArg)" />
       <_MacLinkArg Include="&quot;$(_MacPadFile)&quot;" />
     </ItemGroup>
@@ -380,6 +392,22 @@
     <AotAnywherePatchAppleObject ObjectFile="$(NativeObject)"
                                  ExportsFile="$(ExportsFile)"
                                  ApplyExportsList="$(_MacApplyExportsList)" />
+
+    <!-- ld64 applies the exports list to every input, so the standard
+         pipeline also hides the externals the runtime's static libraries
+         define. Do the same on copies of those archives (the originals live
+         in the NuGet cache) and link the copies instead. -->
+    <AotAnywhereDemoteAppleArchives Condition="'$(_MacApplyExportsList)' == 'true'"
+                                    LinkArgs="@(_MacLinkArg)"
+                                    Archives="@(NativeLibrary)"
+                                    ExportsFile="$(ExportsFile)"
+                                    OutputDir="$(_MacManagedObjDir)/aotanywhere-demoted-libs">
+      <Output TaskParameter="RewrittenLinkArgs" ItemName="_MacDemotedLinkArg" />
+    </AotAnywhereDemoteAppleArchives>
+    <ItemGroup Condition="'$(_MacApplyExportsList)' == 'true'">
+      <_MacLinkArg Remove="@(_MacLinkArg)" />
+      <_MacLinkArg Include="@(_MacDemotedLinkArg)" />
+    </ItemGroup>
 
     <!-- Pre-assemble the managed-code bookends (directive-only .s, so this is
          instant). They cannot ride the link line as sources: zig cc appends

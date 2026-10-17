@@ -1,0 +1,167 @@
+name: Zig Exports List
+
+# Builds zig 0.17.0 with eng/zig-patches applied (its Mach-O linker then
+# honours -exported_symbols_list), cross-links macOS targets with it via
+# UseExternalZig + AotAnywhereZigExportsList, and checks on real Macs that the
+# binaries run - including Hello's forced GC and exception unwind - and export
+# exactly what ld64 would. GitHub-hosted runners only.
+#
+# The patched zig is cached on the patch contents, so only the first run (or a
+# patch change) pays for the ~30-40 min LLVM build.
+
+on:
+  push:
+    branches: [ macos-demote-runtime-exports ]
+    paths:
+      - 'eng/zig-patches/**'
+      - 'src/**'
+      - 'test/**'
+      - '.github/workflows/zig-exports-list.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: 0.17.0
+  ZIG_SRC_SHA256: b6c7f1728f043700d6529bac980800792f824256a9d2f1839b3d62beed0b8abd
+  ZIG_PREFIX: /opt/zig-patched
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Ubuntu 26.04 packages LLVM 22, which zig 0.17 requires. The patched zig
+    # links libLLVM dynamically, so it is built and used in this one image.
+    container: ubuntu:26.04
+    steps:
+      - name: Install toolchain
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates curl xz-utils zstd g++ cmake ninja-build \
+            llvm-22-dev libclang-22-dev liblld-22-dev clang-22 lld-22 \
+            zlib1g-dev libzstd-dev libxml2-dev dotnet-sdk-10.0
+
+      - uses: actions/checkout@v6
+
+      - name: Restore patched zig
+        id: zig-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ZIG_PREFIX }}
+          key: zig-${{ env.ZIG_VERSION }}-${{ hashFiles('eng/zig-patches/**') }}-ubuntu2604-llvm22
+
+      - name: Build patched zig
+        if: steps.zig-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          curl -sSfLO "https://ziglang.org/download/$ZIG_VERSION/zig-$ZIG_VERSION.tar.xz"
+          echo "$ZIG_SRC_SHA256  zig-$ZIG_VERSION.tar.xz" | sha256sum -c
+          tar xf "zig-$ZIG_VERSION.tar.xz"
+          cd "zig-$ZIG_VERSION"
+          for p in "$GITHUB_WORKSPACE"/eng/zig-patches/*.patch; do git apply -v "$p"; done
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH=/usr/lib/llvm-22 -DCMAKE_INSTALL_PREFIX="$ZIG_PREFIX" -DZIG_NO_LANGREF=ON
+          ninja -C build install
+
+      - name: Check patched zig
+        run: |
+          set -eu
+          "$ZIG_PREFIX/bin/zig" version
+          # The patch's own behaviour: only the listed symbol is exported.
+          cd "$RUNNER_TEMP"
+          printf 'int keep_me(void){return 1;}\nint hide_me(void){return 2;}\nint (*common_ptr)(int);\n' > t.c
+          echo _keep_me > t.exports
+          "$ZIG_PREFIX/bin/zig" cc -target aarch64-macos -fcommon -shared t.c -Wl,-exported_symbols_list,t.exports -o t.dylib
+          "$ZIG_PREFIX/bin/zig" cc -target aarch64-macos -fcommon -shared t.c -o t-all.dylib
+          # strings in the export trie are not separately greppable; the
+          # Mac job checks the real binaries with nm. Here just prove the
+          # list changes the output.
+          if cmp -s t.dylib t-all.dylib; then echo "exports list had no effect"; exit 1; fi
+
+      - name: Cross-link macOS targets with the patched zig
+        # _XcodeVersion: the net8 ILCompiler (8.0.31+) compares it numerically,
+        # and it is empty on a non-Mac host - a separate pre-existing issue.
+        run: |
+          set -eu
+          export PATH="$ZIG_PREFIX/bin:$PATH"
+          dotnet build src/tasks/AotAnywhere.Tasks/AotAnywhere.Tasks.csproj -c Release
+          common="-c Release -p:_XcodeVersion=16 -p:UseExternalZig=true -p:AotAnywhereZigExportsList=true"
+          for rid in osx-arm64 osx-x64; do
+            dotnet publish test/Hello.csproj -r "$rid" $common -p:InvariantGlobalization=true \
+              -p:BaseIntermediateOutputPath="$RUNNER_TEMP/obj/hello-$rid/" -o "out/$rid/hello"
+            dotnet publish test/Hello.csproj -r "$rid" $common -p:AotAnywhereSelfTest=true \
+              -p:BaseIntermediateOutputPath="$RUNNER_TEMP/obj/selftest-$rid/" -o "out/$rid/selftest"
+            dotnet publish test/HelloLib/HelloLib.csproj -r "$rid" $common \
+              -p:BaseIntermediateOutputPath="$RUNNER_TEMP/obj/lib-$rid/" -o "out/$rid/lib"
+          done
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: macos-binaries-patched-zig
+          path: out/
+          if-no-files-found: error
+
+  validate:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-arm64
+            runner: macos-latest
+          - rid: osx-x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: macos-binaries-patched-zig
+          path: out
+
+      - name: Run
+        run: |
+          # Collect every result rather than stopping at the first crash.
+          set +e
+          cd "out/${{ matrix.rid }}"
+          for b in hello/Hello selftest/Hello lib/HelloLib.dylib; do
+            chmod +x "$b"; codesign -s - -f "$b" 2>&1 | grep -v "replacing existing signature" || true
+          done
+          fail=0
+          # Hello forces a GC and an exception unwind before printing, so this
+          # also covers the managed-code range brackets, whose symbols the
+          # exports list now hides.
+          out=$(./hello/Hello 2>&1); code=$?
+          if [[ $code -eq 0 && "$out" == "Hello World" ]]; then echo "ok    hello"; else echo "FAIL  hello (exit $code): $out"; fail=1; fi
+          out=$(python3 -c "import ctypes, sys; lib = ctypes.CDLL(sys.argv[1]); lib.hello_add.restype = ctypes.c_int; lib.hello_add.argtypes = [ctypes.c_int, ctypes.c_int]; print(lib.hello_add(2, 3))" "$PWD/lib/HelloLib.dylib" 2>&1); code=$?
+          if [[ $code -eq 0 && "$out" == "5" ]]; then echo "ok    lib"; else echo "FAIL  lib (exit $code): $out"; fail=1; fi
+          out=$(./selftest/Hello --selftest 2>&1); code=$?
+          if [[ $code -eq 0 && "$out" == "selftest ok" ]]; then
+            echo "ok    selftest"
+          elif [[ "${{ matrix.rid }}" == osx-x64 ]]; then
+            # Fails identically on unmodified upstream (exit 138); see
+            # macos-exports.yml's baseline.
+            echo "::warning::osx-x64 selftest failed (exit $code) - pre-existing upstream failure"
+          else
+            echo "FAIL  selftest (exit $code): $out"; fail=1
+          fi
+          exit $fail
+
+      - name: Exports match ld64's
+        run: |
+          set -euo pipefail
+          cd "out/${{ matrix.rid }}"
+          check() {  # check <binary> <expected symbols...>
+            local b=$1; shift
+            local got want
+            got=$(nm -gU "$b" | awk '{print $3}' | sort | tr '\n' ' ')
+            want=$(printf '%s\n' "$@" | sort | tr '\n' ' ')
+            echo "$b: $got"
+            [[ "$got" == "$want" ]] || { echo "  expected: $want"; return 1; }
+          }
+          fail=0
+          check lib/HelloLib.dylib _hello_add _DotNetRuntimeDebugHeader ___dso_handle __mh_dylib_header || fail=1
+          check hello/Hello _DotNetRuntimeDebugHeader ___dso_handle __mh_execute_header || fail=1
+          check selftest/Hello _DotNetRuntimeDebugHeader ___dso_handle __mh_execute_header || fail=1
+          exit $fail

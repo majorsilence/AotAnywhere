@@ -33,10 +33,15 @@ Things to know:
   points and lets the strip drop the method symbols older ILCs emit as
   externals) is ignored by zig's linker, so AotAnywhere applies it to the ILC
   object before the link instead: every symbol not on the list is marked
-  private-external, which zig honours. The result matches the standard
-  pipeline for everything ILC emits; the few hundred externals the runtime's
-  static libraries contribute (`GlobalizationNative_*` and friends) stay
-  exported, since those libraries are not rewritten.
+  private-external, which zig honours. Like ld64, it applies the list to the
+  runtime's static libraries too, on copies of them in the intermediate
+  directory (`GlobalizationNative_*`, `SystemNative_*` and friends end up
+  private). The one gap is C *common* symbols - uninitialized globals such
+  as the ICU shim's `u*_ptr` function pointers: zig's linker ignores
+  private-external on those, so roughly a hundred of them stay exported.
+  With a zig whose linker honours `-exported_symbols_list`, set
+  `AotAnywhereZigExportsList=true` (with `UseExternalZig=true`) to also pass
+  the list to the linker, which hides those too.
 - zig gives osx-arm64 binaries an ad-hoc code signature (Apple Silicon refuses
   to run entirely unsigned code); osx-x64 binaries are left unsigned. Either way
   that only covers running locally — for distribution you should sign (and if
