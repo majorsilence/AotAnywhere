@@ -83,13 +83,36 @@ elsewhere.
 
 ## What's covered
 
-- **Storyboards and XIBs:** views, image views, labels and Auto Layout
-  constraints, which covers launch screens such as MAUI's splash and Avalonia's
-  launch XIB. Anything else stops the build with an error naming the element.
+- **Storyboards and XIBs:**
+  - views: view, image view, label, button (Default style, per-state titles,
+    colours and images), text field, text view, switch, slider, segmented
+    control, activity indicator, scroll view and stack view;
+  - Auto Layout constraints, including the safe area layout guide;
+  - outlets and actions (target/action with the control event) on view
+    controllers, File's Owner and other objects;
+  - view controllers, navigation controllers and tab bar controllers, with
+    navigation items, bar button items and tab bar items;
+  - show, show detail and modal segues, triggered by controls, bar button
+    items or `PerformSegue`; several storyboards in one app.
+
+  Not supported: table and collection views, gesture recognizers, the
+  configuration-based button styles (Plain, Filled, ...), unwind segues,
+  storyboard references, Dynamic Type text styles, and named colours from asset
+  catalogs. Any of these stops the build with an error naming it.
 - **Asset catalogs:** app icons (including Xcode 14's single 1024px icon, scaled
   to each size) and PNG image sets. Colour sets, PDF/SVG images, dark-mode
   variants and other asset types are errors.
 - **Not available:** Metal shader compilation, Core ML models, SceneKit assets,
   texture atlases, and `.dSYM` bundles (symbols are stripped at link time).
+
+## Validation
+
+`.github/workflows/ios-validation.yml` builds `test/ios/IBTest` (three
+storyboards whose controllers drive their own outlets, actions and segues, and
+an app icon) on Linux, Windows and macOS, linking with zig 0.17.0 built with
+`eng/zig-patches` (`eng/build-patched-zig.sh`), and runs every host's simulator
+build on a Mac. Locally: build the tools
+(`dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release`), build the app
+for the simulator, and run `test/ios/run-sim.py <simulator UDID> <IBTest.app>`.
 
 These builds are for local development only; see the repository README.

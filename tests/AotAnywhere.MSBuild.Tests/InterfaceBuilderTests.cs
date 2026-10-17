@@ -4,7 +4,9 @@ namespace AotAnywhere.MSBuild.Tests;
 
 // The ibtool stand-in. Validated end to end against Apple's ibtool output and on screen: MAUI's
 // generated splash storyboard and Avalonia's launch XIB render identically to Apple's compiled
-// versions in the simulator. These pin the encoding rules.
+// versions in the simulator, and test/ios/IBTest's storyboards (navigation, controls, segues,
+// tab bar) compile to the same files as Apple's, render pixel-identically, and drive their
+// outlets, actions and segues at run time. These pin the encoding rules.
 public class InterfaceBuilderTests
 {
     static string Temp() => Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "aotanywhere-ib-" + Guid.NewGuid().ToString("N"))).FullName;
@@ -136,8 +138,256 @@ public class InterfaceBuilderTests
     public async Task UnsupportedElementsAreErrors()
     {
         var dir = Temp();
-        var xib = Xib.Replace("<label ", "<button ").Replace("</label>", "</button>");
+        var xib = Xib.Replace("<label ", "<tableView ").Replace("</label>", "</tableView>");
         await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Bad.xib", xib), dir)).Throws<InterfaceBuilder.CompileError>();
+    }
+
+    const string Navigation = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" useAutolayout="YES" useSafeAreas="YES" initialViewController="NAV">
+            <scenes>
+                <scene sceneID="S1">
+                    <objects>
+                        <navigationController id="NAV" sceneMemberID="viewController">
+                            <navigationBar key="navigationBar" contentMode="scaleToFill" id="NB">
+                                <rect key="frame" x="0.0" y="59" width="393" height="44"/>
+                                <autoresizingMask key="autoresizingMask"/>
+                            </navigationBar>
+                            <connections>
+                                <segue destination="MAIN" kind="relationship" relationship="rootViewController" id="R1"/>
+                            </connections>
+                        </navigationController>
+                        <placeholder placeholderIdentifier="IBFirstResponder" id="FR1" sceneMemberID="firstResponder"/>
+                    </objects>
+                </scene>
+                <scene sceneID="S2">
+                    <objects>
+                        <viewController id="MAIN" customClass="MainViewController" sceneMemberID="viewController">
+                            <view key="view" contentMode="scaleToFill" id="V">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                                <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                                <subviews>
+                                    <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" spacing="12" translatesAutoresizingMaskIntoConstraints="NO" id="SV">
+                                        <rect key="frame" x="20" y="123" width="353" height="100"/>
+                                        <subviews>
+                                            <textField opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="roundedRect" placeholder="Name" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="TF">
+                                                <rect key="frame" x="0.0" y="0.0" width="353" height="34"/>
+                                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                                <textInputTraits key="textInputTraits" autocapitalizationType="words" keyboardType="emailAddress" returnKeyType="done"/>
+                                            </textField>
+                                            <button opaque="NO" contentMode="scaleToFill" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="B1">
+                                                <rect key="frame" x="0.0" y="46" width="353" height="30"/>
+                                                <state key="normal" title="Greet"/>
+                                                <connections>
+                                                    <action selector="greet:" destination="MAIN" eventType="touchUpInside" id="A1"/>
+                                                </connections>
+                                            </button>
+                                            <button opaque="NO" contentMode="scaleToFill" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="B2">
+                                                <rect key="frame" x="0.0" y="88" width="353" height="12"/>
+                                                <state key="normal" title="Next"/>
+                                                <connections>
+                                                    <segue destination="SECOND" kind="show" id="SG"/>
+                                                </connections>
+                                            </button>
+                                        </subviews>
+                                    </stackView>
+                                    <label opaque="NO" text="Loose" translatesAutoresizingMaskIntoConstraints="NO" id="LOOSE">
+                                        <rect key="frame" x="20" y="400" width="100" height="20"/>
+                                    </label>
+                                </subviews>
+                                <viewLayoutGuide key="safeArea" id="SA"/>
+                                <constraints>
+                                    <constraint firstItem="SV" firstAttribute="top" secondItem="SA" secondAttribute="top" constant="20" id="c1"/>
+                                </constraints>
+                            </view>
+                            <navigationItem key="navigationItem" title="Main" id="NI"/>
+                            <connections>
+                                <outlet property="nameField" destination="TF" id="o1"/>
+                            </connections>
+                        </viewController>
+                        <placeholder placeholderIdentifier="IBFirstResponder" id="FR2" sceneMemberID="firstResponder"/>
+                        <exit id="X2" userLabel="Exit" sceneMemberID="exit"/>
+                    </objects>
+                </scene>
+                <scene sceneID="S3">
+                    <objects>
+                        <viewController id="SECOND" sceneMemberID="viewController">
+                            <view key="view" contentMode="scaleToFill" id="V2">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                                <viewLayoutGuide key="safeArea" id="SA2"/>
+                            </view>
+                        </viewController>
+                    </objects>
+                </scene>
+            </scenes>
+        </document>
+        """;
+
+    static Dictionary<string, NibArchive> CompileNavigation(out Dictionary<string, object> info)
+    {
+        var dir = Temp();
+        InterfaceBuilder.Compile(Write(dir, "Nav.storyboard", Navigation), Path.Combine(dir, "out"));
+        var sb = Path.Combine(dir, "out", "Nav.storyboardc");
+        info = Plist.ReadDictionary(File.ReadAllBytes(Path.Combine(sb, "Info.plist")));
+        return Directory.GetFiles(sb, "*.nib").ToDictionary(f => Path.GetFileNameWithoutExtension(f), f => NibArchive.Read(File.ReadAllBytes(f)));
+    }
+
+    static string Str(object? o) => System.Text.Encoding.UTF8.GetString((byte[])((NibArchive.Obj)o!)["NS.bytes"]!);
+
+    [Test]
+    public async Task RelationshipChildrenAreEmbeddedAndSegueDestinationsGetTheirOwnNib()
+    {
+        var nibs = CompileNavigation(out var info);
+
+        // As Apple's ibtool: the root controller lives inside the navigation controller's nib.
+        await Assert.That(nibs.Keys.Order()).IsEquivalentTo(new[] { "MAIN-view-V", "SECOND-view-V2", "UINavigationController-NAV", "UIViewController-SECOND" });
+        await Assert.That(info["UIStoryboardDesignatedEntryPointIdentifier"]).IsEqualTo("UINavigationController-NAV");
+
+        var nav = nibs["UINavigationController-NAV"];
+        var swappers = nav.Objects.Where(o => o.ClassName == "UIClassSwapper").ToList();
+        var navController = swappers.Single(o => Str(o["UIClassName"]) == "UINavigationController");
+        var main = swappers.Single(o => Str(o["UIClassName"]) == "MainViewController");
+        await Assert.That(main["UIParentViewController"]).IsSameReferenceAs(navController);
+        var bar = (NibArchive.Obj)navController["UINavigationBar"]!;
+        await Assert.That(((NibArchive.Obj)bar["UIItems"]!)["UINibEncoderEmptyKey"]).IsSameReferenceAs(main["UINavigationItem"]);
+
+        var template = nav.Objects.Single(o => o.ClassName == "UIStoryboardShowSegueTemplate");
+        await Assert.That(Str(template["UIDestinationViewControllerIdentifier"])).IsEqualTo("UIViewController-SECOND");
+        await Assert.That(Str(template["UIActionName"])).IsEqualTo("showViewController:sender:");
+    }
+
+    [Test]
+    public async Task OutletsActionsAndSeguesInAViewGoThroughUpstreamPlaceholders()
+    {
+        var view = CompileNavigation(out _)["MAIN-view-V"];
+        var proxies = view.Objects.Where(o => o.ClassName == "UIProxyObject").ToDictionary(o => Str(o["UIProxiedObjectIdentifier"]));
+        await Assert.That(proxies.Keys).Contains("UpstreamPlaceholder-1"); // the controller
+        await Assert.That(proxies.Keys).Contains("UpstreamPlaceholder-2"); // the segue template
+
+        var outlet = view.Objects.Single(o => o.ClassName == "UIRuntimeOutletConnection" && Str(o["UILabel"]) == "nameField");
+        await Assert.That(outlet["UISource"]).IsSameReferenceAs(proxies["UpstreamPlaceholder-1"]);
+        await Assert.That(((NibArchive.Obj)outlet["UIDestination"]!).ClassName).IsEqualTo("UITextField");
+
+        var events = view.Objects.Where(o => o.ClassName == "UIRuntimeEventConnection").ToDictionary(o => Str(o["UILabel"]));
+        await Assert.That(events["greet:"]["UIDestination"]).IsSameReferenceAs(proxies["UpstreamPlaceholder-1"]);
+        await Assert.That(events["greet:"]["UIEventMask"]).IsEqualTo(64);
+        await Assert.That(events["perform:"]["UIDestination"]).IsSameReferenceAs(proxies["UpstreamPlaceholder-2"]);
+
+        // The controller's table maps the placeholders back.
+        var nav = CompileNavigation(out _)["UINavigationController-NAV"];
+        var main = nav.Objects.Single(o => o.ClassName == "UIClassSwapper" && Str(o["UIClassName"]) == "MainViewController");
+        var table = ((NibArchive.Obj)main["UIExternalObjectsTableForViewLoading"]!).Items.Where(i => i.Key == "UINibEncoderEmptyKey").Select(i => i.Value).ToList();
+        await Assert.That(Str(table[0])).IsEqualTo("UpstreamPlaceholder-1");
+        await Assert.That(table[1]).IsSameReferenceAs(main);
+        await Assert.That(((NibArchive.Obj)table[3]!).ClassName).IsEqualTo("UIStoryboardShowSegueTemplate");
+    }
+
+    [Test]
+    public async Task OnlyPlacedViewsStopTranslatingTheirAutoresizingMask()
+    {
+        var view = CompileNavigation(out _)["MAIN-view-V"];
+        bool Translates(string className) => !view.Objects.Single(o => o.ClassName == className).Items.Any(i => i.Key == "UIViewDoesNotTranslateAutoresizingMaskIntoConstraints");
+        await Assert.That(Translates("UIStackView")).IsFalse();   // a constraint places it
+        await Assert.That(Translates("UITextField")).IsFalse();   // the stack view places it
+        await Assert.That(Translates("UILabel")).IsTrue();        // nothing does: Interface Builder keeps its frame
+    }
+
+    [Test]
+    public async Task TheSafeAreaGuideIsArchivedOnlyWhenConstraintsUseIt()
+    {
+        var nibs = CompileNavigation(out _);
+        var guide = nibs["MAIN-view-V"].Objects.Single(o => o.ClassName == "UILayoutGuide");
+        await Assert.That(Str(guide["UILayoutGuideIdentifier"])).IsEqualTo("UIViewSafeAreaLayoutGuide");
+        await Assert.That(nibs["SECOND-view-V2"].Objects.Any(o => o.ClassName == "UILayoutGuide")).IsFalse();
+    }
+
+    [Test]
+    public async Task ControlsCarryTheirKeys()
+    {
+        var view = CompileNavigation(out _)["MAIN-view-V"];
+        var field = view.Objects.Single(o => o.ClassName == "UITextField");
+        await Assert.That(field["UIBorderStyle"]).IsEqualTo(3);
+        await Assert.That(field["UIAutocapitalizationType"]).IsEqualTo(1);
+        await Assert.That(field["UIKeyboardType"]).IsEqualTo(7);
+        await Assert.That(field["UIReturnKeyType"]).IsEqualTo(9);
+        await Assert.That(Str(field["UIPlaceholder"])).IsEqualTo("Name");
+
+        var stack = view.Objects.Single(o => o.ClassName == "UIStackView");
+        await Assert.That(stack["UIStackViewAxis"]).IsEqualTo(1);
+        await Assert.That(stack["UIStackViewSpacing"]).IsEqualTo(new NibArchive.Double(12));
+        await Assert.That(((NibArchive.Obj)stack["UIStackViewArrangedSubviews"]!).Items.Count(i => i.Key == "UINibEncoderEmptyKey")).IsEqualTo(3);
+
+        var button = view.Objects.First(o => o.ClassName == "UIButton");
+        await Assert.That(button["UIButtonType"]).IsEqualTo(1);
+        var states = (NibArchive.Obj)button["UIButtonStatefulContent"]!;
+        var content = (NibArchive.Obj)states.Items.Where(i => i.Key == "UINibEncoderEmptyKey").ElementAt(1).Value!;
+        await Assert.That(Str(content["UITitle"])).IsEqualTo("Greet");
+    }
+
+    [Test]
+    public async Task XibActionsAndOutletsTargetFilesOwner()
+    {
+        var dir = Temp();
+        var xib = Xib.Replace("<placeholder placeholderIdentifier=\"IBFilesOwner\" id=\"-1\"/>",
+                "<placeholder placeholderIdentifier=\"IBFilesOwner\" id=\"-1\"><connections><outlet property=\"view\" destination=\"root\" id=\"o1\"/></connections></placeholder>")
+            .Replace("<label text=\"Hello\"", "<switch on=\"YES\" id=\"SW\"><rect key=\"frame\" x=\"1\" y=\"2\" width=\"51\" height=\"31\"/><connections><action selector=\"flip:\" destination=\"-1\" eventType=\"valueChanged\" id=\"a1\"/></connections></switch><label text=\"Hello\"");
+        InterfaceBuilder.Compile(Write(dir, "Owner.xib", xib), dir);
+        var nib = NibArchive.Read(File.ReadAllBytes(Path.Combine(dir, "Owner.nib")));
+        var owner = nib.Objects.Single(o => o.ClassName == "UIProxyObject" && Str(o["UIProxiedObjectIdentifier"]) == "IBFilesOwner");
+        var action = nib.Objects.Single(o => o.ClassName == "UIRuntimeEventConnection");
+        await Assert.That(action["UIDestination"]).IsSameReferenceAs(owner);
+        await Assert.That(action["UIEventMask"]).IsEqualTo(4096);
+        await Assert.That(nib.Objects.Any(o => o.ClassName == "UIRuntimeOutletConnection" && Str(o["UILabel"]) == "view" && o["UISource"] == owner)).IsTrue();
+        // A switch's frame is restored after decoding, as Interface Builder does.
+        var pair = nib.Objects.Single(o => o.ClassName == "UINibKeyValuePair");
+        await Assert.That(Str(((NibArchive.Obj)pair["UIValue"]!)["NS.rectval"])).IsEqualTo("{{1, 2}, {51, 31}}");
+    }
+
+    [Test]
+    public async Task TabBarControllersEmbedTheirTabs()
+    {
+        var dir = Temp();
+        const string tabs = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" initialViewController="T">
+                <scenes>
+                    <scene sceneID="a"><objects>
+                        <viewController id="A" customClass="FirstViewController" sceneMemberID="viewController">
+                            <view key="view" id="VA"><rect key="frame" x="0" y="0" width="320" height="480"/></view>
+                            <tabBarItem key="tabBarItem" title="First" image="First" id="IA"/>
+                        </viewController>
+                    </objects></scene>
+                    <scene sceneID="t"><objects>
+                        <tabBarController id="T" sceneMemberID="viewController">
+                            <tabBar key="tabBar" contentMode="scaleToFill" id="TB"><rect key="frame" x="0" y="431" width="320" height="49"/></tabBar>
+                            <connections><segue destination="A" kind="relationship" relationship="viewControllers" id="r"/></connections>
+                        </tabBarController>
+                    </objects></scene>
+                </scenes>
+            </document>
+            """;
+        InterfaceBuilder.Compile(Write(dir, "Tabs.storyboard", tabs), dir);
+        var sb = Path.Combine(dir, "Tabs.storyboardc");
+        await Assert.That(Directory.GetFiles(sb, "*.nib").Select(Path.GetFileName).Order()).IsEquivalentTo(new[] { "A-view-VA.nib", "UITabBarController-T.nib" });
+        var nib = NibArchive.Read(File.ReadAllBytes(Path.Combine(sb, "UITabBarController-T.nib")));
+        var tabBar = nib.Objects.Single(o => o.ClassName == "UITabBar");
+        var item = nib.Objects.Single(o => o.ClassName == "UITabBarItem");
+        await Assert.That(((NibArchive.Obj)tabBar["UIItems"]!)["UINibEncoderEmptyKey"]).IsSameReferenceAs(item);
+        await Assert.That(Str(item["UITitle"])).IsEqualTo("First");
+    }
+
+    [Test]
+    public async Task UnsupportedSeguesAndScenesAreErrors()
+    {
+        var dir = Temp();
+        await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Unwind.storyboard", Navigation.Replace("kind=\"show\"", "kind=\"unwind\"")), dir))
+            .Throws<InterfaceBuilder.CompileError>();
+        // A table view controller scene (the second scene's controller, retagged).
+        var table = Navigation.Replace("<viewController id=\"SECOND\"", "<tableViewController id=\"SECOND\"");
+        int close = table.LastIndexOf("</viewController>", StringComparison.Ordinal);
+        table = table[..close] + "</tableViewController>" + table[(close + "</viewController>".Length)..];
+        await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Table.storyboard", table), dir))
+            .Throws<InterfaceBuilder.CompileError>();
     }
 
     [Test]

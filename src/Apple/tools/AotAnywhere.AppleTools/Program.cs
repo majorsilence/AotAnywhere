@@ -100,7 +100,7 @@ static class Tools
         HeaderShims? shims = null;
         if (Environment.GetEnvironmentVariable("AOTANYWHERE_OBJC_SHIMS") is { Length: > 0 } shimDir)
         {
-            shims = new HeaderShims(shimDir, Path.Combine(Path.GetDirectoryName(Zig())!, "lib", "libc", "include", "any-darwin-any"));
+            shims = new HeaderShims(shimDir, Path.Combine(ZigLibDir(), "libc", "include", "any-darwin-any"));
             // Non-umbrella framework headers (<CoreImage/CIFilterBuiltins.h>) are only known
             // once the generated sources exist.
             foreach (var source in args.Where(a => !a.StartsWith('-') && File.Exists(a) && Path.GetExtension(a) is ".m" or ".mm" or ".c" or ".cpp"))
@@ -110,7 +110,7 @@ static class Tools
 
         // Set when linking against AotAnywhere's stubs (AotAnywhereAppleLinkStubs) instead of the SDK.
         LinkStubs? stubs = Environment.GetEnvironmentVariable("AOTANYWHERE_APPLE_SYSROOT") is { Length: > 0 } sysroot
-            ? new LinkStubs(sysroot, Environment.GetEnvironmentVariable("DEVELOPER_DIR"), Path.Combine(Path.GetDirectoryName(Zig())!, "lib", "libc", "include", "any-darwin-any"))
+            ? new LinkStubs(sysroot, Environment.GetEnvironmentVariable("DEVELOPER_DIR"), Path.Combine(ZigLibDir(), "libc", "include", "any-darwin-any"))
             : null;
 
         var inv = ClangToZig.Translate(tool, args, shims, stubs);
@@ -381,7 +381,7 @@ static class Tools
     // Prints the result plist the workload's IBTool task parses.
     static int IbTool(List<string> args)
     {
-        string? directory = null, compileTo = null;
+        string? directory = null, compileTo = null, link = null;
         var inputs = new List<string>();
         for (int i = 0; i < args.Count; i++)
         {
@@ -392,8 +392,7 @@ static class Tools
                 case "--output-format" or "--minimum-deployment-target" or "--target-device" or "--sdk" or "--module"
                     or "--output-partial-info-plist" or "--target-device-family" or "--platform":
                     NextArg(args, ref i, args[i]); break;
-                case "--link":
-                    throw new AppleToolException("AotAnywhere: ibtool --link is not supported off-Mac.");
+                case "--link": link = NextArg(args, ref i, args[i]); break;
                 default:
                     if (args[i].StartsWith("--", StringComparison.Ordinal))
                         break; // --errors, --warnings, --notices, --auto-activate-custom-fonts, ...
@@ -403,6 +402,25 @@ static class Tools
         }
 
         var errors = new List<object>();
+        // --link: the workload compiles each storyboard on its own, then links them into one folder.
+        // Linking merges storyboards that reference each other (storyboard references), which isn't
+        // supported, so it is a copy of each compiled storyboard.
+        if (link is not null)
+        {
+            foreach (var input in inputs)
+            {
+                if (!Directory.Exists(input) || !input.TrimEnd('/', '\\').EndsWith(".storyboardc", StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add(new Dictionary<string, object>(StringComparer.Ordinal) { ["description"] = $"{input}: ibtool --link expects compiled storyboards" });
+                    continue;
+                }
+                string target = Path.Combine(link, Path.GetFileName(input.TrimEnd('/', '\\')));
+                if (Directory.Exists(target))
+                    Directory.Delete(target, recursive: true);
+                Ditto.Run([input.TrimEnd('/', '\\') + "/", target]);
+            }
+        }
+        else
         foreach (var input in inputs)
         {
             try
@@ -417,7 +435,7 @@ static class Tools
             {
                 errors.Add(new Dictionary<string, object>(StringComparer.Ordinal)
                 {
-                    ["description"] = $"{input}: {e.Message} (AotAnywhere's ibtool compiles views, image views and labels only; build on a Mac with Xcode for anything else)",
+                    ["description"] = $"{input}: {e.Message} (see docs/ios-targets.md for what AotAnywhere's ibtool supports; build on a Mac with Xcode for anything else)",
                 });
             }
         }
@@ -571,6 +589,26 @@ static class Tools
         Environment.GetEnvironmentVariable("AOTANYWHERE_ZIG") is { Length: > 0 } z
             ? z
             : throw new AppleToolException("AotAnywhere: AOTANYWHERE_ZIG is not set, so zig cannot be found.");
+
+    // zig's lib directory, as zig reports it: a zig from PATH (UseExternalZig) has no directory in
+    // AOTANYWHERE_ZIG, and packaged zigs (Homebrew, distributions) keep lib somewhere else.
+    static string ZigLibDir()
+    {
+        string zig = Zig();
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo(zig, "env") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false })!;
+            string output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit();
+            var m = System.Text.RegularExpressions.Regex.Match(output, "\\.lib_dir = \"((?:[^\"\\\\]|\\\\.)*)\"");
+            if (p.ExitCode == 0 && m.Success)
+                return m.Groups[1].Value.Replace("\\\\", "\\");
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+        }
+        return Path.Combine(Path.GetDirectoryName(zig)!, "lib");
+    }
 
     // "<sdks>/iPhoneOS26.5.sdk" -> "26.5"
     static string SdkVersion(string sdkPath, string platform) =>

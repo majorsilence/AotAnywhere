@@ -1,0 +1,5 @@
+<Project>
+  <!-- Build against the package sources; the tool must be built first:
+       dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../src/Apple/StuDev.AotAnywhere.Apple.targets" />
+</Project>
