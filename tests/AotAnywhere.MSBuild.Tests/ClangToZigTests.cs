@@ -161,4 +161,15 @@ public class ClangToZigTests
             .IsEqualTo(".section __TEXT,__entitlements,regular,no_dead_strip\n.incbin \"/obj/App.xcent\"\n");
         await Assert.That(ClangToZig.TargetOf(inv)).IsEqualTo("--target=aarch64-ios.15.0-simulator");
     }
+
+    [Test]
+    public async Task MissingSwiftBackDeploymentLibrariesWarnBelowTheirCutoff()
+    {
+        var below = ClangToZig.BackDeploymentWarnings(["swiftCompatibility56", "swiftCompatibilityConcurrency"], "--target=aarch64-ios.15.0-simulator").ToList();
+        await Assert.That(below.Count).IsEqualTo(1);
+        await Assert.That(below[0]).Contains("swiftCompatibility56");
+        await Assert.That(ClangToZig.BackDeploymentWarnings(["swiftCompatibility56"], "--target=aarch64-ios.16.0").Any()).IsFalse();
+        // A library without a known cutoff always warns.
+        await Assert.That(ClangToZig.BackDeploymentWarnings(["swiftCompatibility50"], "--target=aarch64-ios.18").Count()).IsEqualTo(1);
+    }
 }

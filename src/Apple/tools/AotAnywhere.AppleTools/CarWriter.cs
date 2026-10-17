@@ -20,9 +20,19 @@ public sealed class CarWriter
     // The key format: every rendition key lists these attributes' values, in this order.
     static readonly ushort[] KeyFormat = [Appearance, Localization, Scale, Idiom, Subtype, Dimension2, Dimension1, Identifier, Element, Part];
 
-    /// <summary>A bitmap, or (with <paramref name="Sizes"/>) a multisize image set listing an icon's sizes.</summary>
+    /// <summary>
+    /// A rendition: a bitmap (<paramref name="Image"/>), a multisize image set listing an icon's sizes
+    /// (<paramref name="Sizes"/>), a color (<paramref name="Color"/>: sRGB red, green, blue, alpha), or
+    /// raw data stored as-is (<paramref name="Raw"/> with its four-character <paramref name="RawFormat"/>:
+    /// "PDF " and "SVG " vector images, "DATA" data assets with their <paramref name="Uti"/>).
+    /// </summary>
     public sealed record Rendition(Dictionary<ushort, ushort> Attributes, string FileName, Png? Image, double ScaleFactor,
-        IReadOnlyList<(int Width, int Height, int Index)>? Sizes = null);
+        IReadOnlyList<(int Width, int Height, int Index)>? Sizes = null,
+        double[]? Color = null, byte[]? Raw = null, string? RawFormat = null, string? Uti = null, uint Flags = 0);
+
+    // UIKit's appearance names, by the Appearance attribute value renditions carry.
+    static readonly (string Name, ushort Value)[] Appearances = [("UIAppearanceAny", 0), ("UIAppearanceDark", 1)];
+    public const ushort AppearanceDark = 1;
 
     readonly List<(string Name, Dictionary<ushort, ushort> Attributes)> _facets = [];
     readonly List<Rendition> _renditions = [];
@@ -57,6 +67,13 @@ public sealed class CarWriter
 
         bom.AddTree("FACETKEYS", _facets.Select(f => (Encoding.UTF8.GetBytes(f.Name), FacetValue(f.Attributes))));
         bom.AddTree("RENDITIONS", _renditions.Select(r => (RenditionKey(r.Attributes), RenditionValue(r))));
+        if (_renditions.Any(r => r.Attributes.GetValueOrDefault(Appearance) != 0))
+            bom.AddTree("APPEARANCEKEYS", Appearances.Select(a =>
+            {
+                var v = new byte[2];
+                BinaryPrimitives.WriteUInt16LittleEndian(v, a.Value);
+                return (Encoding.ASCII.GetBytes(a.Name), v);
+            }));
         return bom.Write();
     }
 
@@ -91,6 +108,10 @@ public sealed class CarWriter
     {
         if (r.Sizes is not null)
             return MultisizeValue(r);
+        if (r.Color is not null)
+            return ColorValue(r);
+        if (r.Raw is not null)
+            return RawValue(r);
         var image = r.Image!;
         byte[] compressed;
         using (var ms = new MemoryStream())
@@ -124,7 +145,7 @@ public sealed class CarWriter
         "ISTC"u8.CopyTo(value);
         BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(4), 1);
         // flags: is_opaque (bit 3), bitmap_encoding 1 (bits 4-7)
-        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(8), (image.Opaque ? 1u << 3 : 0) | (1u << 4));
+        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(8), (image.Opaque ? 1u << 3 : 0) | (1u << 4) | r.Flags);
         BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(12), w);
         BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(16), h);
         BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(20), (uint)Math.Round(r.ScaleFactor * 100));
@@ -232,5 +253,71 @@ public sealed class CarWriter
             sb.Append("rendition ").Append(r.Name).Append($" layout={r.Layout} {r.Width}x{r.Height} ")
                 .AppendLine(string.Join(' ', r.Attributes.Select(a => $"{a.Key}={a.Value}")));
         return sb.ToString();
+    }
+
+    // The structured-image header every non-bitmap rendition starts with, then its info blocks.
+    static MemoryStream Header(uint flags, uint scaleFactor, string pixelFormat, ushort layout, string name, List<(uint Magic, byte[] Data)> info, int payload)
+    {
+        var infoBytes = new MemoryStream();
+        foreach (var (magic, data) in info)
+        {
+            infoBytes.Write(BitConverter.GetBytes(magic));
+            infoBytes.Write(BitConverter.GetBytes((uint)data.Length));
+            infoBytes.Write(data);
+        }
+        var value = new byte[184];
+        "ISTC"u8.CopyTo(value);
+        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(4), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(8), flags);
+        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(20), scaleFactor);
+        if (pixelFormat.Length == 4)
+            Encoding.ASCII.GetBytes(new string(pixelFormat.Reverse().ToArray())).CopyTo(value, 24); // a little-endian four-char code
+        BinaryPrimitives.WriteUInt16LittleEndian(value.AsSpan(36), layout);
+        var nameBytes = Encoding.UTF8.GetBytes(name);
+        nameBytes.AsSpan(0, Math.Min(nameBytes.Length, 127)).CopyTo(value.AsSpan(40));
+        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(168), (uint)infoBytes.Length);
+        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(172), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(value.AsSpan(180), (uint)payload);
+        var output = new MemoryStream();
+        output.Write(value);
+        infoBytes.WriteTo(output);
+        return output;
+    }
+
+    static byte[] Words(params uint[] words) => words.SelectMany(BitConverter.GetBytes).ToArray();
+
+    // A color (layout 1009): "COLR", version 1, color space 1 (sRGB), the component count, then the
+    // components as doubles (single-precision values widened, as Xcode writes them).
+    static byte[] ColorValue(Rendition r)
+    {
+        var payload = new MemoryStream();
+        payload.Write("RLOC"u8);
+        payload.Write(Words(1, 1, (uint)r.Color!.Length));
+        foreach (var c in r.Color)
+            payload.Write(BitConverter.GetBytes((double)(float)c));
+        var output = Header(0, 0, "", 1009, r.FileName, [(1004, Words(0, 0)), (1006, Words(1))], (int)payload.Length);
+        payload.WriteTo(output);
+        return output.ToArray();
+    }
+
+    // Raw data (vector images: layout 9, flagged vector; data assets: layout 1000 with their type
+    // identifier), stored behind a "DWAR" header.
+    static byte[] RawValue(Rendition r)
+    {
+        bool data = r.RawFormat == "DATA";
+        var info = new List<(uint, byte[])> { (1004, Words(0, BitConverter.SingleToUInt32Bits(1f))) };
+        if (data && r.Uti is not null)
+        {
+            var uti = Encoding.UTF8.GetBytes(r.Uti + "\0");
+            info.Add((1005, [.. Words((uint)uti.Length, 0), .. uti]));
+        }
+        info.Add((1006, Words(1)));
+        var payload = new byte[12 + r.Raw!.Length];
+        "DWAR"u8.CopyTo(payload);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8), (uint)r.Raw.Length);
+        r.Raw.CopyTo(payload, 12);
+        var output = Header(data ? 0u : 1u << 2, data ? 100u : 0u, r.RawFormat!, (ushort)(data ? 1000 : 9), data ? "CoreStructuredImage" : r.FileName, info, payload.Length);
+        output.Write(payload);
+        return output.ToArray();
     }
 }

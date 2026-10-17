@@ -1,15 +1,17 @@
 name: iOS Validation
 
 # StuDev.AotAnywhere.Apple end to end, from every host family:
-#   zig      - zig 0.17.0 with eng/zig-patches applied, cross-built on Linux for Linux, macOS and
-#              Windows hosts (eng/build-patched-zig.sh; cached on the patches, so only a patch
-#              change rebuilds it).
-#   build    - on Linux, Windows and macOS: the Apple tools and the MSBuild tests, then
-#              test/ios/IBTest (storyboards, asset catalog) for the simulator and as a device app
-#              signed with a throwaway identity, linked by that host's patched zig.
-#   validate - on a Mac: Apple's codesign checks every host's apps, each simulator build runs its
-#              storyboard self-tests in a simulator, and the signed .ipa files are inspected.
-# These are local-development builds; App Store distribution is out of scope (see the README).
+#   zig      - zig with eng/zig-patches applied, cross-built on Linux for Linux, macOS and Windows
+#              hosts (eng/build-patched-zig.sh): the pinned release, and zig master as an early
+#              warning (cached on the resolved version and the patches).
+#   build    - on Linux, Windows and macOS, for each supported iOS workload version (pinned with a
+#              rollback file): the Apple tools, then test/ios/IBTest (storyboards, asset catalog)
+#              for the simulator and as a device app signed with a throwaway identity, linked by
+#              that host's patched zig. The MSBuild tests run once per host.
+#   validate - on a Mac: Apple's codesign checks every build's apps, each simulator build runs its
+#              self-tests in a simulator, and the signed .ipa files are inspected.
+# Experimental entries (zig master, the newest unpinned workload) are reported but don't fail the
+# run. These are local-development builds; App Store distribution is out of scope (see the README).
 #
 # Runners are GitHub-hosted by default; set the repository variables IOS_LINUX_RUNNER,
 # IOS_WINDOWS_RUNNER and IOS_MACOS_RUNNER (e.g. depot-ubuntu-latest) to use others.
@@ -22,6 +24,7 @@ on:
       - 'src/ZigResolve.targets'
       - 'eng/zig-patches/**'
       - 'eng/build-patched-zig.sh'
+      - 'eng/generate-apple-ios-sysroot.cs'
       - 'test/ios/**'
       - 'tests/**'
       - '.github/workflows/ios-validation.yml'
@@ -32,6 +35,7 @@ on:
       - 'src/ZigResolve.targets'
       - 'eng/zig-patches/**'
       - 'eng/build-patched-zig.sh'
+      - 'eng/generate-apple-ios-sysroot.cs'
       - 'test/ios/**'
       - 'tests/**'
       - '.github/workflows/ios-validation.yml'
@@ -45,26 +49,46 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ZIG_VERSION: 0.17.0
   DOTNET_NOLOGO: 1
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
 jobs:
   zig:
-    name: Patched zig
+    name: Patched zig ${{ matrix.zig }}
     runs-on: ${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - zig: '0.17.0'
+            experimental: false
+          - zig: master
+            experimental: true
     steps:
       - uses: actions/checkout@v7
+
+      - name: Resolve the zig version
+        id: resolve
+        run: |
+          version=$(curl -sSfL https://ziglang.org/download/index.json | python3 -c "
+          import json, sys
+          index, want = json.load(sys.stdin), sys.argv[1]
+          print(index['master']['version'] if want == 'master' else want)" "${{ matrix.zig }}")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zig ${{ matrix.zig }} is $version"
 
       - name: Restore patched zig
         id: cache
         uses: actions/cache@v6
         with:
           path: out/zig
-          key: zig-patched-${{ env.ZIG_VERSION }}-${{ hashFiles('eng/zig-patches/**', 'eng/build-patched-zig.sh') }}
+          key: zig-patched-${{ steps.resolve.outputs.version }}-${{ hashFiles('eng/zig-patches/**', 'eng/build-patched-zig.sh') }}
 
       - name: Build patched zig for Linux, macOS and Windows hosts
         if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          ZIG_VERSION: ${{ steps.resolve.outputs.version }}
         run: eng/build-patched-zig.sh out/zig x86_64-linux-musl aarch64-macos-none x86_64-windows-gnu
 
       - name: Check the patch's behaviour
@@ -83,26 +107,35 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: zig-patched
+          name: zig-patched-${{ matrix.zig }}
           path: out/zig/zig-*
           if-no-files-found: error
 
   build:
-    name: Build on ${{ matrix.host }}
+    name: ${{ matrix.host }} / iOS ${{ matrix.workload }} / zig ${{ matrix.zig }}
     needs: zig
+    if: ${{ !cancelled() }}
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
+        host: [ linux, windows, macos ]
+        # Microsoft.iOS.Sdk versions (the workload's iOS manifest); keep in step with the
+        # workloads eng/generate-apple-ios-sysroot.cs builds the link stubs from.
+        workload: [ '26.0.11017', '26.5.10318', '27.0.10722' ]
+        zig: [ '0.17.0' ]
+        experimental: [ false ]
         include:
-          - host: linux
-            runner: ${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}
-            zig: x86_64-linux-musl
-          - host: windows
-            runner: ${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}
-            zig: x86_64-windows-gnu
-          - host: macos
-            runner: ${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}
-            zig: aarch64-macos-none
+          - { host: linux, runner: "${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-linux-musl }
+          - { host: windows, runner: "${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}", target: x86_64-windows-gnu }
+          - { host: macos, runner: "${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}", target: aarch64-macos-none }
+          # Early warnings: zig master, and whatever iOS workload is newest.
+          - { host: linux, runner: "${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-linux-musl, workload: '27.0.10722', zig: master, experimental: true }
+          - { host: windows, runner: "${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}", target: x86_64-windows-gnu, workload: '27.0.10722', zig: master, experimental: true }
+          - { host: macos, runner: "${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}", target: aarch64-macos-none, workload: '27.0.10722', zig: master, experimental: true }
+          - { host: linux, runner: "${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-linux-musl, workload: latest, zig: '0.17.0', experimental: true }
+          - { host: windows, runner: "${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}", target: x86_64-windows-gnu, workload: latest, zig: '0.17.0', experimental: true }
+          - { host: macos, runner: "${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}", target: aarch64-macos-none, workload: latest, zig: '0.17.0', experimental: true }
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -118,28 +151,37 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: zig-patched
+          name: zig-patched-${{ matrix.zig }}
           path: zig
 
       - name: Put the patched zig on PATH
         run: |
           set -eu
           cd zig
-          case "${{ matrix.zig }}" in
-            *-windows-*) unzip -q "zig-${{ matrix.zig }}.zip"; cygpath -w "$PWD/zig-${{ matrix.zig }}" >> "$GITHUB_PATH" ;;
-            *)           tar xzf "zig-${{ matrix.zig }}.tar.gz"; echo "$PWD/zig-${{ matrix.zig }}" >> "$GITHUB_PATH" ;;
+          case "${{ matrix.target }}" in
+            *-windows-*) unzip -q "zig-${{ matrix.target }}.zip"; cygpath -w "$PWD/zig-${{ matrix.target }}" >> "$GITHUB_PATH" ;;
+            *)           tar xzf "zig-${{ matrix.target }}.tar.gz"; echo "$PWD/zig-${{ matrix.target }}" >> "$GITHUB_PATH" ;;
           esac
 
-      - name: Install the iOS workload
+      - name: Install the iOS workload ${{ matrix.workload }}
         run: |
+          set -eu
           zig version
-          dotnet workload install ios
+          if [ "${{ matrix.workload }}" = latest ]; then
+            dotnet workload install ios
+          else
+            # A rollback file pins the iOS manifest; the 10.0.100 band serves every 10.0 SDK.
+            dotnet workload config --update-mode manifests
+            echo '{ "microsoft.net.sdk.ios": "${{ matrix.workload }}/10.0.100" }' > "$RUNNER_TEMP/rollback.json"
+            dotnet workload install ios --from-rollback-file "$RUNNER_TEMP/rollback.json"
+          fi
           dotnet workload list
 
       - name: Build the Apple tools
         run: dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release
 
       - name: MSBuild tests
+        if: matrix.workload == '27.0.10722' && matrix.zig == '0.17.0'
         run: dotnet run --project tests/AotAnywhere.MSBuild.Tests -c Release
 
       - name: Throwaway signing identity
@@ -165,10 +207,11 @@ jobs:
           mkdir -p out
           tar czf out/IBTest-sim.tar.gz -C test/ios/IBTest/bin/Release/net10.0-ios/iossimulator-arm64 IBTest.app
           cp test/ios/IBTest/bin/Release/net10.0-ios/ios-arm64/publish/IBTest.ipa out/
+          echo "${{ matrix.experimental }}" > out/experimental
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ios-${{ matrix.host }}
+          name: ios-${{ matrix.host }}-${{ matrix.workload }}-zig-${{ matrix.zig }}
           path: out/
           if-no-files-found: error
 
@@ -202,37 +245,54 @@ jobs:
           xcrun simctl bootstatus "$udid" -b
           echo "udid=$udid" >> "$GITHUB_OUTPUT"
 
-      - name: Check and run every host's apps
+      - name: Check and run every build's apps
         run: |
           set -u
           fail=0
+          rows=()
+          # Every required build must be here; experimental ones may be missing.
           for host in linux windows macos; do
-            echo "::group::$host"
-            dir="apps/ios-$host"
-            if [ ! -d "$dir" ]; then echo "FAIL $host: no build"; fail=1; echo "::endgroup::"; continue; fi
+            for workload in 26.0.11017 26.5.10318 27.0.10722; do
+              if [ ! -d "apps/ios-$host-$workload-zig-0.17.0" ]; then
+                echo "FAIL $host / iOS $workload: no build"; rows+=("| $host | $workload | 0.17.0 | **no build** |"); fail=1
+              fi
+            done
+          done
+          for dir in apps/ios-*; do
+            name=${dir#apps/ios-}
+            experimental=$(cat "$dir/experimental" 2>/dev/null || echo false)
+            echo "::group::$name"
+            bad=0
 
-            # Simulator app: signature, then the storyboard self-tests. Windows records no Unix
-            # modes, so make the Mach-O files executable as the simulator installer expects.
+            # Simulator app: signature, then the self-tests. Windows records no Unix modes, so
+            # make the Mach-O files executable as the simulator installer expects.
             mkdir -p "$dir/sim" && tar xzf "$dir/IBTest-sim.tar.gz" -C "$dir/sim"
             app="$dir/sim/IBTest.app"
             find "$app" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && chmod +x "$1"' _ {} \;
-            if codesign --verify --deep --strict "$app"; then echo "ok    $host simulator signature"; else echo "FAIL  $host simulator signature"; fail=1; fi
+            codesign --verify --deep --strict "$app" || { echo "FAIL simulator signature"; bad=1; }
             for f in Assets.car Showcase.storyboardc Controls.storyboardc Tabbed.storyboardc; do
-              [ -e "$app/$f" ] || { echo "FAIL  $host simulator app has no $f"; fail=1; }
+              [ -e "$app/$f" ] || { echo "FAIL simulator app has no $f"; bad=1; }
             done
-            python3 test/ios/run-sim.py "${{ steps.sim.outputs.udid }}" "$app" || fail=1
+            python3 test/ios/run-sim.py "${{ steps.sim.outputs.udid }}" "$app" || bad=1
 
             # Device .ipa: modes, profile and identity. The test identity is self-signed, so
             # codesign reports the signature valid but not the designated requirement.
             ipa="$dir/IBTest.ipa"
-            zipinfo "$ipa" Payload/IBTest.app/IBTest | grep -q '^-rwxr-xr-x' || { echo "FAIL  $host .ipa executable is not 0755"; fail=1; }
+            zipinfo "$ipa" Payload/IBTest.app/IBTest | grep -q '^-rwxr-xr-x' || { echo "FAIL .ipa executable is not 0755"; bad=1; }
             mkdir -p "$dir/device" && ditto -x -k "$ipa" "$dir/device"
             dev="$dir/device/Payload/IBTest.app"
-            [ -f "$dev/embedded.mobileprovision" ] || { echo "FAIL  $host .ipa has no embedded.mobileprovision"; fail=1; }
+            [ -f "$dev/embedded.mobileprovision" ] || { echo "FAIL .ipa has no embedded.mobileprovision"; bad=1; }
             verify=$(codesign --verify --deep --strict -vv "$dev" 2>&1)
             echo "$verify"
-            echo "$verify" | grep -q 'valid on disk' || { echo "FAIL  $host device signature"; fail=1; }
-            codesign -dvv "$dev" 2>&1 | grep -q 'Authority=Apple Development: AotAnywhere CI' || { echo "FAIL  $host device signer"; fail=1; }
+            echo "$verify" | grep -q 'valid on disk' || { echo "FAIL device signature"; bad=1; }
+            codesign -dvv "$dev" 2>&1 | grep -q 'Authority=Apple Development: AotAnywhere CI' || { echo "FAIL device signer"; bad=1; }
             echo "::endgroup::"
+
+            host=${name%%-*}; rest=${name#*-}; workload=${rest%%-zig-*}; zig=${rest##*-zig-}
+            result=$([ $bad = 0 ] && echo ok || echo '**failed**')
+            [ "$experimental" = true ] && result="$result (experimental)"
+            rows+=("| $host | $workload | $zig | $result |")
+            if [ $bad != 0 ] && [ "$experimental" != true ]; then fail=1; fi
           done
+          { echo "| host | iOS workload | zig | result |"; echo "|---|---|---|---|"; printf '%s\n' "${rows[@]}"; } >> "$GITHUB_STEP_SUMMARY"
           exit $fail

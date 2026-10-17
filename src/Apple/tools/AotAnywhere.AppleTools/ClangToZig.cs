@@ -213,6 +213,37 @@ public static class ClangToZig
     public static string ForceLoadAssembly(string library) =>
         $".section __DATA,__data\n.private_extern __swift_FORCE_LOAD_$_{library}\n.globl __swift_FORCE_LOAD_$_{library}\n__swift_FORCE_LOAD_$_{library}:\n.byte 0\n";
 
+    // The iOS release whose Swift runtime includes each back-deployment library's fixes.
+    static readonly Dictionary<string, Version> BackDeployedUntil = new(StringComparer.Ordinal)
+    {
+        ["swiftCompatibility56"] = new(15, 4),
+        ["swiftCompatibilityConcurrency"] = new(15, 0),
+    };
+
+    /// <summary>
+    /// Warnings for the Swift back-deployment libraries a link stands in for with
+    /// <see cref="ForceLoadAssembly"/>, when the app's deployment target (from
+    /// <paramref name="target"/>, a <c>--target=</c> argument) is older than the iOS release that
+    /// has their fixes built in.
+    /// </summary>
+    public static IEnumerable<string> BackDeploymentWarnings(IEnumerable<string> libraries, string target)
+    {
+        string os = target[(target.IndexOf("-ios.", StringComparison.Ordinal) + 5)..];
+        if (os.IndexOf('-') is int dash and >= 0)
+            os = os[..dash];
+        Version.TryParse(os.Contains('.') ? os : os + ".0", out var deployment);
+        foreach (var library in libraries)
+        {
+            bool known = BackDeployedUntil.TryGetValue(library, out var until);
+            if (known && deployment is not null && deployment >= until)
+                continue;
+            yield return $"Swift code in this app asks for Swift's {library} back-deployment library, which only ships with " +
+                $"Xcode's toolchain; it is left out, so the Swift runtime fixes it carries are missing on iOS versions " +
+                (known ? $"before {until!.Major}.{until.Minor} (the app's deployment target is {os}). Set SupportedOSPlatformVersion to {until.Major}.{until.Minor} or later, or build on a Mac with Xcode, if the app must run there."
+                       : $"that predate them (the app's deployment target is {os}). Build on a Mac with Xcode if the app must run there.");
+        }
+    }
+
     /// <summary>
     /// Whether a failed zig link's output shows nothing but undefined Objective-C class symbols
     /// (and the notes that go with them) - the case a stub link resolves by flat lookup.

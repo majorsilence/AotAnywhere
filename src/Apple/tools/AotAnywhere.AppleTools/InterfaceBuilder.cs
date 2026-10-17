@@ -69,6 +69,7 @@ public static class InterfaceBuilder
             foreach (var el in objects.Elements())
                 if (el.Name.LocalName != "placeholder")
                     top.Add(b.Element(el));
+            top.AddRange(b.ExtraTopLevel);
             string path = Path.Combine(outputDirectory, name + ".nib");
             File.WriteAllBytes(path, b.Build(top));
             written.Add(path);
@@ -89,24 +90,31 @@ public static class InterfaceBuilder
     sealed class Storyboard(XElement document)
     {
         readonly Dictionary<string, XElement> controllers = new(StringComparer.Ordinal);
+        readonly Dictionary<string, XElement> references = new(StringComparer.Ordinal); // storyboard references
         readonly Dictionary<string, string> parentOf = new(StringComparer.Ordinal);
         readonly Dictionary<string, XElement> firstResponders = new(StringComparer.Ordinal);
-        readonly Dictionary<string, List<string>> externals = new(StringComparer.Ordinal); // per controller: "controller" or a segue id
+        readonly Dictionary<string, List<XElement>> sceneObjects = new(StringComparer.Ordinal); // gesture recognizers, per controller
+        readonly Dictionary<string, List<string>> externals = new(StringComparer.Ordinal); // per controller: "controller", or a segue or scene object id
 
         public List<(string File, byte[] Data)> Compile(out Dictionary<string, object> info)
         {
             foreach (var scene in document.Descendants("scene"))
             {
                 var objects = scene.Element("objects")?.Elements().ToList() ?? [];
+                foreach (var reference in objects.Where(o => o.Name.LocalName == "viewControllerPlaceholder"))
+                    references[(string)reference.Attribute("id")!] = reference;
                 foreach (var controller in objects.Where(IsViewController))
                 {
                     string id = (string)controller.Attribute("id")!;
                     controllers[id] = controller;
                     if (objects.FirstOrDefault(o => (string?)o.Attribute("placeholderIdentifier") == "IBFirstResponder") is { } fr)
                         firstResponders[id] = fr;
-                    // Every scene also has an Exit placeholder (for unwind segues, which aren't supported).
-                    foreach (var other in objects.Where(o => o != controller && o.Name.LocalName is not ("placeholder" or "exit")))
-                        throw new CompileError($"scene-level '{other.Name.LocalName}' objects (outside the view controller) are not supported");
+                    // Every scene also has an Exit placeholder (the destination of unwind segues).
+                    var others = objects.Where(o => o != controller && o.Name.LocalName is not ("placeholder" or "exit" or "viewControllerPlaceholder")).ToList();
+                    foreach (var other in others)
+                        if (!NibBuilder.IsGestureRecognizer(other))
+                            throw new CompileError($"scene-level '{other.Name.LocalName}' objects are not supported (only gesture recognizers)");
+                    sceneObjects[id] = others;
                 }
             }
             foreach (var (id, controller) in controllers)
@@ -116,8 +124,10 @@ public static class InterfaceBuilder
             string? initial = (string?)document.Attribute("initialViewController");
             var owners = controllers.Keys.Where(id =>
                     id == initial || !parentOf.ContainsKey(id) || controllers[id].Attribute("storyboardIdentifier") is not null
-                    || controllers.Values.SelectMany(Segues).Any(s => (string?)s.Attribute("kind") != "relationship" && Target(s) == id))
+                    || controllers.Values.SelectMany(Segues).Any(s => (string?)s.Attribute("kind") is not ("relationship" or "unwind") && Target(s) == id))
                 .ToList();
+            foreach (var id in parentOf.Keys.Where(references.ContainsKey))
+                throw new CompileError($"relationship segues to storyboard references ('{id}') are not supported");
 
             var files = new List<(string, byte[])>();
             var map = new Dictionary<string, object>(StringComparer.Ordinal);
@@ -130,11 +140,30 @@ public static class InterfaceBuilder
                 map[nib] = nib;
                 files.Add((nib + ".nib", ControllerNib(id)));
             }
+            // A storyboard reference: a placeholder nib, and where the controller really lives.
+            var external = new Dictionary<string, object>(StringComparer.Ordinal);
+            foreach (var (id, reference) in references)
+            {
+                string nib = NibName(id);
+                map[nib] = nib;
+                files.Add((nib + ".nib", ReferenceNib(nib)));
+                var target = new Dictionary<string, object>(StringComparer.Ordinal)
+                {
+                    ["UIReferencedStoryboardName"] = (string?)reference.Attribute("storyboardName") ?? throw new CompileError($"storyboard reference '{id}' names no storyboard"),
+                };
+                if ((string?)reference.Attribute("referencedIdentifier") is { } referenced)
+                    target["UIReferencedControllerIdentifier"] = referenced;
+                if ((string?)reference.Attribute("storyboardBundleIdentifier") is not null)
+                    throw new CompileError($"storyboard reference '{id}': references to other bundles are not supported");
+                external[nib] = target;
+            }
             info = new Dictionary<string, object>(StringComparer.Ordinal)
             {
                 ["UIStoryboardVersion"] = 1L,
                 ["UIViewControllerIdentifiersToNibNames"] = map,
             };
+            if (external.Count > 0)
+                info["UIViewControllerIdentifiersToExternalStoryboardReferences"] = external;
             if (initial is not null)
                 info["UIStoryboardDesignatedEntryPointIdentifier"] = NibName(initial);
             return files;
@@ -148,17 +177,34 @@ public static class InterfaceBuilder
             "viewController" => "UIViewController",
             "navigationController" => "UINavigationController",
             "tabBarController" => "UITabBarController",
-            var other => throw new CompileError($"'{other}' scenes are not supported (supported: viewController, navigationController, tabBarController)"),
+            "tableViewController" => "UITableViewController",
+            "collectionViewController" => "UICollectionViewController",
+            var other => throw new CompileError($"'{other}' scenes are not supported (supported: viewController, navigationController, tabBarController, tableViewController, collectionViewController)"),
         };
 
-        string NibName(string id) =>
-            (string?)Controller(id).Attribute("storyboardIdentifier") ?? $"{OriginalClass(Controller(id))}-{id}";
+        string NibName(string id) => references.ContainsKey(id)
+            ? $"UIViewController-{id}"
+            : (string?)Controller(id).Attribute("storyboardIdentifier") ?? $"{OriginalClass(Controller(id))}-{id}";
+
+        byte[] ReferenceNib(string nib)
+        {
+            var b = new NibBuilder(document);
+            var owner = b.Proxy("IBFilesOwner", "-1");
+            var top = new List<NibArchive.Obj> { owner, b.Proxy("IBFirstResponder", "-2"), b.Proxy("UIStoryboardPlaceholder", null) };
+            var placeholder = new NibArchive.Obj("UIStoryboardViewControllerPlaceholder").Add("UIStoryboardIdentifier", NibBuilder.String(nib));
+            b.Track(placeholder);
+            top.Add(placeholder);
+            b.Connect("sceneViewController", owner, placeholder);
+            return b.Build(top);
+        }
 
         XElement Controller(string id) =>
             controllers.TryGetValue(id, out var c) ? c : throw new CompileError($"no view controller with id '{id}'");
 
+
+        // The controller's view: a view, or a table or collection view for those controllers.
         static XElement? ViewOf(XElement controller) =>
-            controller.Elements("view").FirstOrDefault(v => (string?)v.Attribute("key") == "view");
+            controller.Elements().FirstOrDefault(v => (string?)v.Attribute("key") == "view" && v.Name.LocalName is "view" or "tableView" or "collectionView");
 
         string ViewNibName(string id) => $"{id}-view-{(string)ViewOf(Controller(id))!.Attribute("id")!}";
 
@@ -184,10 +230,12 @@ public static class InterfaceBuilder
 
             var viewIds = view.DescendantsAndSelf().Select(e => (string?)e.Attribute("id")).Where(i => i is not null).ToHashSet();
             var outlets = controller.Element("connections")?.Elements("outlet").Where(o => viewIds.Contains((string?)o.Attribute("destination"))).ToList() ?? [];
-            bool needsController = outlets.Count > 0 || view.Descendants("connections").Elements().Any(c => (string?)c.Attribute("destination") == id);
+            var destinations = view.Descendants("connections").Elements().Select(c => (string?)c.Attribute("destination")).ToHashSet();
+            bool needsController = outlets.Count > 0 || destinations.Contains(id);
             var list = new List<string>();
             if (needsController)
                 list.Add("controller");
+            list.AddRange(sceneObjects.GetValueOrDefault(id, []).Select(o => (string)o.Attribute("id")!).Where(destinations.Contains));
             list.AddRange(view.Descendants("segue").Select(s => (string)s.Attribute("id")!));
             externals[id] = list;
             for (int i = 0; i < list.Count; i++)
@@ -198,6 +246,7 @@ public static class InterfaceBuilder
 
             var viewObj = b.Element(view);
             top.Add(viewObj);
+            top.AddRange(b.ExtraTopLevel);
             foreach (var outlet in outlets)
                 b.Connect((string)outlet.Attribute("property")!, b.ById(id), b.ById((string)outlet.Attribute("destination")!));
             b.Connect("view", owner, viewObj);
@@ -216,6 +265,7 @@ public static class InterfaceBuilder
             var obj = EncodeController(id, b, null, storyboardProxies);
             top.InsertRange(2, storyboardProxies);
             top.Add(obj);
+            top.AddRange(b.ExtraTopLevel);
             b.Connect("sceneViewController", owner, obj);
             return b.Build(top);
         }
@@ -244,6 +294,11 @@ public static class InterfaceBuilder
             if (el.Elements("tabBarItem").FirstOrDefault(t => (string?)t.Attribute("key") == "tabBarItem") is { } ti)
                 o.Add("UITabBarItem", b.TabBarItem(ti));
 
+            // Scene-level gesture recognizers, kept alive by the controller.
+            var recognizers = new Dictionary<string, NibArchive.Obj>(StringComparer.Ordinal);
+            foreach (var r in sceneObjects.GetValueOrDefault(id, []))
+                recognizers[(string)r.Attribute("id")!] = b.Element(r);
+
             // Segue templates, then the external objects the view nib refers to.
             var templates = new Dictionary<string, NibArchive.Obj>(StringComparer.Ordinal);
             foreach (var segue in Segues(el).Where(s => (string?)s.Attribute("kind") != "relationship"))
@@ -259,7 +314,8 @@ public static class InterfaceBuilder
                 if (!externals.TryGetValue(id, out var list))
                     throw new CompileError($"internal error: view nib of '{id}' not compiled");
                 for (int i = 0; i < list.Count; i++)
-                    table.Add(($"UpstreamPlaceholder-{i + 1}", list[i] == "controller" ? o : templates[list[i]]));
+                    table.Add(($"UpstreamPlaceholder-{i + 1}", list[i] == "controller" ? o
+                        : templates.TryGetValue(list[i], out var t) ? t : recognizers[list[i]]));
             }
             if (ViewOf(el) is not null)
             {
@@ -272,6 +328,8 @@ public static class InterfaceBuilder
                 o.Add("UIStoryboardIdentifier", NibBuilder.String(sid));
             if (templates.Count > 0)
                 o.Add("UIStoryboardSegueTemplates", NibBuilder.Array("NSArray", templates.Values));
+            if (recognizers.Count > 0)
+                o.Add("UITopLevelObjectsToKeepAliveFromStoryboard", NibBuilder.Array("NSArray", recognizers.Values));
 
             switch (el.Name.LocalName)
             {
@@ -316,6 +374,8 @@ public static class InterfaceBuilder
             }
             o.Add("UIClassName", NibBuilder.String((string?)el.Attribute("customClass") ?? original));
             o.Add("UIOriginalClassName", NibBuilder.String(original));
+            foreach (var r in recognizers.Values)
+                b.KeepTopLevel(r);
 
             // Controller outlets to objects in this nib (its items), and the items' actions and segues.
             foreach (var outlet in el.Element("connections")?.Elements("outlet") ?? [])
@@ -334,7 +394,7 @@ public static class InterfaceBuilder
         NibArchive.Obj SegueTemplate(XElement segue)
         {
             string kind = (string?)segue.Attribute("kind") ?? "";
-            string destination = NibName(Target(segue));
+            string destination = kind == "unwind" ? "" : NibName(Target(segue));
             NibArchive.Obj t;
             switch (kind)
             {
@@ -366,8 +426,15 @@ public static class InterfaceBuilder
                     if (!NibBuilder.Bool(segue, "animates", true))
                         t.Add("UIAnimates", false);
                     return t;
+                case "unwind":
+                    t = new NibArchive.Obj("UIStoryboardUnwindSegueTemplate");
+                    if ((string?)segue.Attribute("identifier") is { } unwindId)
+                        t.Add("UIIdentifier", NibBuilder.String(unwindId));
+                    t.Add("UIDestinationViewControllerIdentifier", null);
+                    t.Add("UIAction", NibBuilder.String((string?)segue.Attribute("unwindAction") ?? throw new CompileError("unwind segue without an unwindAction")));
+                    return t;
                 default:
-                    throw new CompileError($"'{kind}' segues are not supported (supported: show, showDetail, presentation)");
+                    throw new CompileError($"'{kind}' segues are not supported (supported: show, showDetail, presentation, unwind)");
             }
         }
     }
@@ -393,6 +460,12 @@ public static class InterfaceBuilder
         readonly List<NibArchive.Obj> constraints = [];
         readonly List<(XElement Connection, NibArchive.Obj Source)> pendingConnections = [];
         readonly List<NibArchive.Obj> keyValuePairs = [];
+        readonly Dictionary<(NibArchive.Obj, string), NibArchive.Obj> outletCollections = new();
+
+        /// <summary>Objects that must also be top-level (static table data sources, scene gesture recognizers).</summary>
+        public List<NibArchive.Obj> ExtraTopLevel { get; } = [];
+
+        public void KeepTopLevel(NibArchive.Obj o) => ExtraTopLevel.Add(o);
 
         public NibArchive.Obj Proxy(string identifier, string? id, bool track = true)
         {
@@ -440,21 +513,43 @@ public static class InterfaceBuilder
                     case "outlet":
                         Connect((string)c.Attribute("property")!, source, ById(destination!));
                         break;
+                    case "outletCollection":
+                    {
+                        // One connection per source and property, its destinations in an array.
+                        string property = (string)c.Attribute("property")!;
+                        if (!outletCollections.TryGetValue((source, property), out var array))
+                        {
+                            array = new NibArchive.Obj("NSMutableArray").Add("NSInlinedValue", true);
+                            outletCollections[(source, property)] = array;
+                            connections.Add(new NibArchive.Obj("UIRuntimeOutletCollectionConnection")
+                                .Add("UILabel", String(property)).Add("UISource", source).Add("UIDestination", array)
+                                .Add("runtimeCollectionClassName", String((string?)c.Attribute("collectionClass") ?? "NSArray"))
+                                .Add("addsContentToExistingCollection", Bool(c, "appends", false)));
+                        }
+                        array.Add("UINibEncoderEmptyKey", ById(destination!));
+                        break;
+                    }
                     case "action":
                     {
                         var ev = new NibArchive.Obj("UIRuntimeEventConnection")
                             .Add("UILabel", String((string)c.Attribute("selector")!)).Add("UISource", source).Add("UIDestination", ById(destination!));
-                        if (source.ClassName != "UIBarButtonItem")
+                        if (!NoEventMask(source))
                             ev.Add("UIEventMask", EventMask((string?)c.Attribute("eventType")));
                         connections.Add(ev);
                         break;
                     }
+                    case "segue" when source.ClassName is "UITableViewCell" or "UICollectionViewCell" || source.ClassName.EndsWith("Cell", StringComparison.Ordinal):
+                        // Selecting a cell performs its segue.
+                        if ((string?)c.Attribute("trigger") is { } trigger && trigger != "selection")
+                            throw new CompileError($"cell segues triggered by '{trigger}' are not supported");
+                        Connect("selectionSegueTemplate", source, ById((string)c.Attribute("id")!));
+                        break;
                     case "segue":
                     {
                         // Controls trigger a segue by sending -perform: to its template.
                         var ev = new NibArchive.Obj("UIRuntimeEventConnection")
                             .Add("UILabel", String("perform:")).Add("UISource", source).Add("UIDestination", ById((string)c.Attribute("id")!));
-                        if (source.ClassName != "UIBarButtonItem")
+                        if (!NoEventMask(source))
                             ev.Add("UIEventMask", 64); // touchUpInside
                         connections.Add(ev);
                         break;
@@ -465,6 +560,10 @@ public static class InterfaceBuilder
             }
             pendingConnections.Clear();
         }
+
+        // Bar button items and gesture recognizers send their action without a control event.
+        static bool NoEventMask(NibArchive.Obj source) =>
+            source.ClassName == "UIBarButtonItem" || source.ClassName.EndsWith("GestureRecognizer", StringComparison.Ordinal);
 
         static int EventMask(string? type) => type switch
         {
@@ -509,8 +608,18 @@ public static class InterfaceBuilder
             "activityIndicatorView" => ActivityIndicator(e),
             "scrollView" => View(e, "UIScrollView", o => ScrollViewKeys(e, o)),
             "stackView" => StackView(e),
-            var other => throw new CompileError($"'{other}' elements are not supported (supported: view, imageView, label, button, textField, textView, switch, slider, segmentedControl, activityIndicatorView, scrollView, stackView)"),
+            "tableView" => TableView(e),
+            "tableViewCell" => TableViewCell(e),
+            "tableViewCellContentView" => View(e, "UITableViewCellContentView"),
+            "collectionView" => CollectionView(e),
+            "collectionViewCell" => CollectionViewCell(e),
+            "collectionViewCellContentView" => View(e, "UIView"),
+            "tapGestureRecognizer" => TapRecognizer(e),
+            var other when IsGestureRecognizer(e) => throw new CompileError($"'{other}' gesture recognizers are not supported (only tap)"),
+            var other => throw new CompileError($"'{other}' elements are not supported (supported: view, imageView, label, button, textField, textView, switch, slider, segmentedControl, activityIndicatorView, scrollView, stackView, tableView, collectionView, tapGestureRecognizer)"),
         };
+
+        public static bool IsGestureRecognizer(XElement e) => e.Name.LocalName.EndsWith("GestureRecognizer", StringComparison.Ordinal);
 
         NibArchive.Obj View(XElement e, string defaultClass, Action<NibArchive.Obj>? specific = null)
         {
@@ -568,6 +677,10 @@ public static class InterfaceBuilder
                 o.Add("UIViewContentCompressionResistancePriority", String($"{{{hc}, {vc}}}"));
             if (defaultClass == "UIStackView")
                 o.Add("UIViewLayoutMargins", Insets(0, 0, 0, 0));
+            if (Bool(e, "preservesSuperviewLayoutMargins", false))
+                o.Add("UIViewPreservesSuperviewMargins", true).Add("UIViewPreservesSpecificSuperviewMargins", 15);
+            if (!Bool(e, "insetsLayoutMarginsFromSafeArea", true))
+                o.Add("UIViewInsetsLayoutMarginsFromSafeArea", 0);
             o.Add("UIViewSemanticContentAttribute", 0);
 
             // The safe area layout guide constraints may reference.
@@ -625,6 +738,8 @@ public static class InterfaceBuilder
         {
             if ((string?)e.Attribute("text") is { } text)
                 o.Add("UIText", String(text));
+            if (Bool(e, "adjustsFontForContentSizeCategory", false))
+                o.Add("UIAdjustsFontForContentSizeCategory", true);
             var font = e.Elements("fontDescription").FirstOrDefault();
             double pointSize = Num(font, "pointSize", 17);
             o.Add("UIFont", Font(font, 17));
@@ -660,7 +775,9 @@ public static class InterfaceBuilder
                 o.Add("UIAdjustsFontSizeToFit", Bool(e, "adjustsFontSizeToFit", true)).Add("UIMinimumScaleFactor", float.Parse(scale, CultureInfo.InvariantCulture));
             else if (Bool(e, "adjustsFontSizeToFit", true))
                 o.Add("UIAdjustsFontSizeToFit", true);
-            o.Add("UIDisableUpdateTextColorOnTraitCollectionChange", false);
+            // A catalog color adapts to the trait collection itself.
+            bool catalogColor = e.Elements("color").Any(c => (string?)c.Attribute("key") == "textColor" && c.Attribute("name") is not null);
+            o.Add("UIDisableUpdateTextColorOnTraitCollectionChange", catalogColor);
         });
 
         static int TextAlignment(XElement e) => (string?)e.Attribute("textAlignment") switch
@@ -696,9 +813,13 @@ public static class InterfaceBuilder
 
         NibArchive.Obj Button(XElement e) => View(e, "UIButton", o =>
         {
-            if (e.Element("buttonConfiguration") is not null)
-                throw new CompileError("buttons with a button configuration (Xcode's 'Plain', 'Filled', ... styles) are not supported; set the button's Style to 'Default'");
             ControlKeys(e, o);
+            if (e.Elements("buttonConfiguration").FirstOrDefault(c => (string?)c.Attribute("key") == "configuration") is { } configuration)
+            {
+                o.Add("UIAdjustsImageWhenHighlighted", true).Add("UIAdjustsImageWhenDisabled", true).Add("UIButtonType", 1);
+                o.Add("UIButtonConfiguration", ButtonConfiguration(configuration));
+                return;
+            }
             var content = new List<(NibArchive.Obj, NibArchive.Obj)>();
             foreach (var state in e.Elements("state"))
             {
@@ -734,9 +855,95 @@ public static class InterfaceBuilder
             o.Add("UIButtonConfiguration", null);
         });
 
+        // Xcode's "Plain/Gray/Tinted/Filled" buttons (UIButton.Configuration). The background
+        // configuration is archived as not customized, so UIKit derives it from the style.
+        NibArchive.Obj ButtonConfiguration(XElement c)
+        {
+            int style = (string?)c.Attribute("style") switch
+            {
+                null or "plain" => 0, "gray" => 1, "tinted" => 2, "filled" => 3,
+                var x => throw new CompileError($"button configuration style '{x}' is not supported"),
+            };
+            var background = new NibArchive.Obj("UIBackgroundConfiguration");
+            void Plain(string key, object? value) => background.Add(key, value).Add("hasCustomized-" + key, false);
+            Plain("customView", null);
+            Plain("cornerRadius", new NibArchive.Double(17));
+            Plain("maskedCorners", 15);
+            var styleBackground = style switch
+            {
+                0 => SystemColor("clearColor", (0, 0, 0, 0)),
+                1 => SystemColor("tertiarySystemFillColor", (0.470588, 0.470588, 0.501961, 0.16)),
+                2 => Color(0, 0.533333, 1, 0.18),
+                _ => Color(0, 0.5333333333333333, 1, 1),
+            };
+            Plain("backgroundColor", styleBackground);
+            Plain("backgroundColorTransformerIdentifier", 0);
+            Plain("visualEffect", null);
+            Plain("visualEffectGroupName", null);
+            background.Add("visualEffectblurClippingMode", 0);
+            Plain("image", null);
+            Plain("imageContentMode", 0);
+            Plain("backgroundInsets", String("{0, 0, 0, 0}"));
+            Plain("edgesAddingLayoutMarginsToBackgroundInsets", 0);
+            background.Add("strokeColor", new NibArchive.Obj("UIColor").Add("UISystemColorName", String("clearColor")).Add("UIColorComponentCount", 2)
+                .Add("UIWhite", 0f).Add("UIAlpha", 0f).Add("NSWhite", "0 0"u8.ToArray()).Add("NSColorSpace", 4)).Add("hasCustomized-strokeColor", true);
+            Plain("strokeColorTransformerIdentifier", 0);
+            background.Add("strokeWidth", new NibArchive.Double(1)).Add("hasCustomized-strokeWidth", true);
+            Plain("strokeOutset", new NibArchive.Double(0));
+            background.Add("strokeLocation", 0).Add("defaultStyle", 0).Add("defaultStyle_v2", 0);
+
+            var o = new NibArchive.Obj("UIButtonConfiguration");
+            o.Add("UIButtonConfigurationButtonStyle", style).Add("UIButtonConfigurationBackground", background);
+            o.Add("UIButtonConfigurationCornerStyle", (string?)c.Attribute("cornerStyle") switch
+            {
+                null or "dynamic" => 0, "fixed" => -1, "small" => 1, "medium" => 2, "large" => 3, "capsule" => 4,
+                var x => throw new CompileError($"unknown button cornerStyle '{x}'"),
+            });
+            o.Add("UIButtonConfigurationButtonSize", (string?)c.Attribute("buttonSize") switch
+            {
+                null or "medium" => 0, "small" => 1, "mini" => 2, "large" => 3,
+                var x => throw new CompileError($"unknown button size '{x}'"),
+            });
+            o.Add("UIButtonConfigurationMacIdiomStyle", 0);
+            o.Add("UIButtonConfigurationBaseBackgroundColor", ColorFor(c, "baseBackgroundColor"));
+            o.Add("UIButtonConfigurationBaseForegroundColor", ColorFor(c, "baseForegroundColor"));
+            NibArchive.Obj? image = null;
+            if ((string?)c.Attribute("image") is { Length: > 0 } imageName)
+            {
+                image = Image(imageName);
+                if ((string?)c.Attribute("catalog") == "system")
+                    image.Add("UISystemSymbolResourceName", String(imageName));
+            }
+            o.Add("UIButtonConfigurationImage", image);
+            o.Add("UIButtonConfigurationPreferredSymbolConfigurationForImage", null).Add("UIButtonConfigurationSymbolContentTransition", null);
+            o.Add("UIButtonConfigurationShowsActivityIndicator", Bool(c, "showsActivityIndicator", false));
+            NibArchive.Obj Attributed(string? text)
+            {
+                var a = new NibArchive.Obj("NSAttributedString").Add("NSString", String(text ?? ""));
+                return string.IsNullOrEmpty(text) ? a : a.Add("NSAttributes", Dictionary(new List<(string, NibArchive.Obj)>()));
+            }
+            o.Add("UIButtonConfigurationTitle", Attributed((string?)c.Attribute("title")));
+            o.Add("UIButtonConfigurationSubtitle", Attributed((string?)c.Attribute("subtitle")));
+            o.Add("UIButtonConfigurationImagePlacement", (string?)c.Attribute("imagePlacement") switch
+            {
+                null or "leading" => 2, "top" => 1, "bottom" => 4, "trailing" => 8,
+                var x => throw new CompileError($"unknown button imagePlacement '{x}'"),
+            });
+            o.Add("UIButtonConfigurationImagePadding", (float)Num(c, "imagePadding", 0));
+            o.Add("UIButtonConfigurationTitlePadding", (float)Num(c, "titlePadding", 1));
+            o.Add("UIButtonConfigurationTitleAlignment", (string?)c.Attribute("titleAlignment") switch
+            {
+                null or "automatic" => 0, "leading" => 1, "center" => 2, "trailing" => 3,
+                var x => throw new CompileError($"unknown button titleAlignment '{x}'"),
+            });
+            return o;
+        }
+
         NibArchive.Obj TextField(XElement e) => View(e, "UITextField", o =>
         {
             ControlKeys(e, o);
+            if (Bool(e, "adjustsFontForContentSizeCategory", false))
+                o.Add("UIAdjustsFontForContentSizeCategory", true);
             o.Add("UIFont", Font(e.Element("fontDescription"), 14));
             if ((string?)e.Attribute("placeholder") is { } placeholder)
                 o.Add("UIPlaceholder", String(placeholder));
@@ -954,6 +1161,253 @@ public static class InterfaceBuilder
             o.Add("UIStackViewLayoutMarginsRelative", Bool(e, "layoutMarginsRelativeArrangement", false));
         });
 
+        // --- tables, collections, gestures -------------------------------------------------
+
+        // Views a table or collection view hosts outside its cells, which aren't compiled.
+        static void RejectAccessoryViews(XElement e)
+        {
+            if (e.Elements().FirstOrDefault(c => (string?)c.Attribute("key") is "tableHeaderView" or "tableFooterView" or "backgroundView") is { } extra)
+                throw new CompileError($"table and collection view '{(string?)extra.Attribute("key")}'s are not supported");
+            if (e.Descendants("collectionReusableView").Any())
+                throw new CompileError("collection view section headers and footers are not supported");
+        }
+
+        NibArchive.Obj TableView(XElement e) => View(e, "UITableView", o =>
+        {
+            RejectAccessoryViews(e);
+            ScrollViewKeys(e, o);
+            if (Bool(e, "alwaysBounceVertical", false))
+                o.Add("UIAlwaysBounceVertical", true);
+            var (tableStyle, style) = (string?)e.Attribute("style") switch
+            {
+                null or "plain" => (0, 0), "grouped" => (1, 1), "insetGrouped" => (2, 1),
+                var x => throw new CompileError($"unknown table view style '{x}'"),
+            };
+            o.Add("UITableViewStyle", tableStyle).Add("UIStyle", style);
+            int separator = (string?)e.Attribute("separatorStyle") switch
+            {
+                null or "default" or "singleLine" => 1, "none" => 0, "singleLineEtched" => 2,
+                var x => throw new CompileError($"unknown separatorStyle '{x}'"),
+            };
+            o.Add("UISeparatorStyle", separator).Add("UISeparatorStyleIOS5AndLater", separator);
+            o.Add("UIPrefetchingEnabled", Bool(e, "prefetchingEnabled", true));
+            o.Add("UIRowHeight", (float)Num(e, "rowHeight", -1));
+            o.Add("UISectionHeaderHeight", (float)Num(e, "sectionHeaderHeight", 28));
+            o.Add("UISectionFooterHeight", (float)Num(e, "sectionFooterHeight", 28));
+            o.Add("UIEstimatedRowHeight", (float)Num(e, "estimatedRowHeight", -1));
+            o.Add("UIEstimatedSectionHeaderHeight", (float)Num(e, "estimatedSectionHeaderHeight", 0));
+            o.Add("UIEstimatedSectionFooterHeight", (float)Num(e, "estimatedSectionFooterHeight", 0));
+            o.Add("UIFillerRowHeight", new NibArchive.Double(0)).Add("UISectionHeaderTopPadding", new NibArchive.Double(-1));
+            o.Add("UIInsetsContentViewsToSafeArea", true);
+            switch ((string?)e.Attribute("dataMode") ?? "prototypes")
+            {
+                case "prototypes":
+                {
+                    var cells = e.Element("prototypes")?.Elements("tableViewCell").ToList() ?? [];
+                    if (cells.Count > 0)
+                    {
+                        var (nibs, externals) = PrototypeNibs(cells);
+                        o.Add("UITableViewCellPrototypeNibs", nibs).Add("UITableViewCellPrototypeNibExternalObjects", externals);
+                    }
+                    break;
+                }
+                case "static":
+                {
+                    // Static cells: a data source object holding sections of rows, connected to File's Owner.
+                    var source = new NibArchive.Obj("UITableViewDataSource");
+                    Track(source);
+                    var sections = new List<NibArchive.Obj>();
+                    foreach (var section in e.Element("sections")?.Elements("tableViewSection") ?? [])
+                    {
+                        var so = new NibArchive.Obj("UITableViewSection");
+                        Track(so, (string?)section.Attribute("id"));
+                        if ((string?)section.Attribute("headerTitle") is { } header)
+                            so.Add("UITableSectionHeaderTitle", String(header));
+                        if ((string?)section.Attribute("footerTitle") is { } footer)
+                            so.Add("UITableSectionFooterTitle", String(footer));
+                        so.Add("UITableSectionRows", Array("NSArray", (section.Element("cells")?.Elements("tableViewCell") ?? []).Select(c =>
+                            new NibArchive.Obj("UITableViewRow").Add("UITableRowCell", TableViewCell(c)).Add("UITableRowHeight", (float)Num(c, "rowHeight", -1)))));
+                        sections.Add(so);
+                    }
+                    source.Add("UITableSections", Array("NSArray", sections));
+                    ExtraTopLevel.Add(source);
+                    Connect("staticDataSource", ById("-1"), source);
+                    break;
+                }
+                case var m:
+                    throw new CompileError($"table view dataMode '{m}' is not supported");
+            }
+            o.Add("UISeparatorInsetReference", 0);
+        });
+
+        // Prototype cells: each compiled into its own nib, which UIKit instantiates per reuse. References
+        // from a cell to objects outside it (the controller, segue templates) go through the cell nib's
+        // upstream placeholders, mapped to this nib's objects.
+        (NibArchive.Obj Nibs, NibArchive.Obj Externals) PrototypeNibs(List<XElement> cells)
+        {
+            var nibs = new List<(NibArchive.Obj, NibArchive.Obj)>();
+            var tables = new List<(NibArchive.Obj, NibArchive.Obj)>();
+            foreach (var cell in cells)
+            {
+                string reuse = (string?)cell.Attribute("reuseIdentifier") ?? throw new CompileError("a prototype cell has no reuse identifier");
+                var inner = new NibBuilder(document);
+                foreach (var (alias, target) in aliases)
+                    inner.Alias(alias, target);
+                var top = new List<NibArchive.Obj> { inner.Proxy("IBFilesOwner", "-1"), inner.Proxy("IBFirstResponder", "-2") };
+                var inside = cell.DescendantsAndSelf().Where(x => x.Parent?.Name.LocalName != "connections").Select(x => (string?)x.Attribute("id")).OfType<string>().ToHashSet(StringComparer.Ordinal);
+                var outside = cell.Descendants("connections").Elements()
+                    .Select(c => c.Name.LocalName == "segue" ? (string?)c.Attribute("id") : (string?)c.Attribute("destination"))
+                    .OfType<string>().Where(d => !inside.Contains(d) && !aliases.ContainsKey(d) && d is not ("-1" or "-2")).Distinct().ToList();
+                var table = new List<(NibArchive.Obj, NibArchive.Obj)>();
+                for (int i = 0; i < outside.Count; i++)
+                {
+                    string name = $"UpstreamPlaceholder-{i + 1}";
+                    top.Add(inner.Proxy(name, outside[i]));
+                    table.Add((String(name), ById(outside[i])));
+                }
+                top.Add(inner.Element(cell));
+                var archive = new NibArchive.Obj("NSData").Add("NS.bytes", inner.Build(top));
+                nibs.Add((String(reuse), new NibArchive.Obj("UINib").Add("captureEnclosingNIBBundleOnDecode", true).Add("archiveData", archive)));
+                tables.Add((String(reuse), Dictionary(table, "NSMutableDictionary")));
+            }
+            return (Dictionary(nibs, "NSMutableDictionary"), Dictionary(tables, "NSMutableDictionary"));
+        }
+
+        NibArchive.Obj TableViewCell(XElement e)
+        {
+            var contentElement = e.Elements("tableViewCellContentView").FirstOrDefault(c => (string?)c.Attribute("key") == "contentView")
+                ?? throw new CompileError("a table view cell has no content view");
+            // The labels a cell style lays out are UIKit's own label class.
+            foreach (var key in new[] { "textLabel", "detailTextLabel" })
+                if ((string?)e.Attribute(key) is { } labelId)
+                    foreach (var label in contentElement.Descendants("label").Where(l => (string?)l.Attribute("id") == labelId))
+                        label.SetAttributeValue("customClass", (string?)label.Attribute("customClass") ?? "UITableViewLabel");
+            return View(e, "UITableViewCell", o =>
+            {
+                var content = Element(contentElement);
+                var (_, _, w, h) = Frame(e);
+                var separator = new NibArchive.Obj("_UITableViewCellSeparatorView")
+                    .Add("UIBounds", Geometry(0, 0, w, 1)).Add("UICenter", Geometry(w / 2, h - 0.5))
+                    .Add("UIDeepDrawRect", true).Add("UIOpaque", true).Add("UIAutoresizeSubviews", true).Add("UIViewSemanticContentAttribute", 0);
+                o.Items.Insert(o.Items.FindIndex(i => i.Key == "UIDeepDrawRect"), ("UISubviews", Array("NSMutableArray", [content, separator])));
+                if ((string?)e.Attribute("reuseIdentifier") is { } reuse)
+                    o.Add("UIReuseIdentifier", String(reuse));
+                int cellStyle = (string?)e.Attribute("style") switch
+                {
+                    null or "IBUITableViewCellStyleDefault" => 0, "IBUITableViewCellStyleValue1" => 1,
+                    "IBUITableViewCellStyleValue2" => 2, "IBUITableViewCellStyleSubtitle" => 3,
+                    var x => throw new CompileError($"unknown table view cell style '{x}'"),
+                };
+                if (cellStyle != 0)
+                    o.Add("UITableViewCellStyle", cellStyle);
+                int selection = (string?)e.Attribute("selectionStyle") switch
+                {
+                    null or "default" => 3, "none" => 0, "blue" => 1, "gray" => 2,
+                    var x => throw new CompileError($"unknown selectionStyle '{x}'"),
+                };
+                if (selection != 3)
+                    o.Add("UISelectionStyle", selection);
+                int accessory = (string?)e.Attribute("accessoryType") switch
+                {
+                    null or "none" => 0, "disclosureIndicator" => 1, "detailDisclosureButton" => 2, "checkmark" => 3, "detailButton" => 4,
+                    var x => throw new CompileError($"unknown accessoryType '{x}'"),
+                };
+                if (accessory != 0)
+                    o.Add("UIAccessoryType", accessory);
+                o.Add("UIIndentationWidth", (float)Num(e, "indentationWidth", 10));
+                if ((string?)e.Attribute("indentationLevel") is { } level)
+                    o.Add("UIIndentationLevel", int.Parse(level, CultureInfo.InvariantCulture));
+                o.Add("UISystemBackgroundView", null).Add("UIContentConfigurationView", null).Add("UIContentView", content);
+                NibArchive.Obj? Ref(string key) => (string?)e.Attribute(key) is { } id ? ById(id) : null;
+                o.Add("UITextLabel", Ref("textLabel")).Add("UIDetailTextLabel", Ref("detailTextLabel")).Add("UIImageView", Ref("imageView"));
+            });
+        }
+
+        NibArchive.Obj CollectionView(XElement e) => View(e, "UICollectionView", o =>
+        {
+            RejectAccessoryViews(e);
+            ScrollViewKeys(e, o);
+            o.Add("UIDelegate", null);
+            var layout = e.Elements("collectionViewFlowLayout").FirstOrDefault(l => (string?)l.Attribute("key") == "collectionViewLayout")
+                ?? throw new CompileError("only collection views with a flow layout are supported");
+            o.Add("UICollectionLayout", FlowLayout(layout));
+            o.Add("UIAllowsUserInitiatedMultipleSelection", true);
+            if ((string?)e.Attribute("dataMode") is { } mode && mode != "prototypes")
+                throw new CompileError($"collection view dataMode '{mode}' is not supported");
+            var cells = e.Element("cells")?.Elements("collectionViewCell").ToList() ?? [];
+            if (cells.Count > 0)
+            {
+                var (nibs, externals) = PrototypeNibs(cells);
+                o.Add("UICollectionViewCellPrototypeNibExternalObjects", externals).Add("UICollectionViewCellNibDict", nibs);
+            }
+            o.Add("UICollectionViewPrefetchingEnabled", Bool(e, "prefetchingEnabled", true));
+        });
+
+        NibArchive.Obj FlowLayout(XElement l)
+        {
+            var o = new NibArchive.Obj("UICollectionViewFlowLayout");
+            Track(o, (string?)l.Attribute("id"));
+            (double W, double H) Size(string key)
+            {
+                var size = l.Elements("size").FirstOrDefault(x => (string?)x.Attribute("key") == key);
+                return (Num(size, "width"), Num(size, "height"));
+            }
+            var item = Size("itemSize");
+            o.Add("UIItemSize", Geometry(item.W, item.H));
+            if (Num(l, "minimumLineSpacing", 10) != 10)
+                o.Add("UILineSpacing", (float)Num(l, "minimumLineSpacing"));
+            if (Num(l, "minimumInteritemSpacing", 10) != 10)
+                o.Add("UIInteritemSpacing", (float)Num(l, "minimumInteritemSpacing"));
+            if ((string?)l.Attribute("scrollDirection") == "horizontal")
+                o.Add("UIScrollDirection", 1);
+            var header = Size("headerReferenceSize");
+            if (header != (0, 0))
+                o.Add("UIHeaderReferenceSize", Geometry(header.W, header.H));
+            var footer = Size("footerReferenceSize");
+            if (footer != (0, 0))
+                o.Add("UIFooterReferenceSize", Geometry(footer.W, footer.H));
+            var inset = l.Elements("inset").FirstOrDefault(x => (string?)x.Attribute("key") == "sectionInset");
+            if (inset is not null)
+                o.Add("UISectionInset", Insets(Num(inset, "minY"), Num(inset, "minX"), Num(inset, "maxY"), Num(inset, "maxX")));
+            if (Bool(l, "automaticEstimatedItemSize", false))
+                throw new CompileError("self-sizing (automatic estimated size) collection view cells are not supported");
+            return o;
+        }
+
+        NibArchive.Obj CollectionViewCell(XElement e)
+        {
+            var contentElement = e.Elements("collectionViewCellContentView").FirstOrDefault(c => (string?)c.Attribute("key") == "contentView");
+            return View(e, "UICollectionViewCell", o =>
+            {
+                NibArchive.Obj? content = null;
+                if (contentElement is not null)
+                {
+                    content = Element(contentElement);
+                    o.Items.Insert(o.Items.FindIndex(i => i.Key == "UIDeepDrawRect"), ("UISubviews", Array("NSMutableArray", [content])));
+                }
+                if ((string?)e.Attribute("reuseIdentifier") is { } reuse)
+                    o.Add("UIReuseIdentifier", String(reuse));
+                o.Add("UISystemBackgroundView", null).Add("UIContentConfigurationView", null).Add("UIContentView", content);
+            });
+        }
+
+        NibArchive.Obj TapRecognizer(XElement e)
+        {
+            foreach (var a in new[] { "numberOfTapsRequired", "numberOfTouchesRequired" })
+                if (Num(e, a, 1) != 1)
+                    throw new CompileError($"tap gesture recognizers with {a} other than 1 are not supported");
+            var o = new NibArchive.Obj("UITapGestureRecognizer");
+            Track(o, (string?)e.Attribute("id"));
+            o.Add("UIGestureRecognizer.allowedTouchTypes", 15).Add("UIGestureRecognizer.requiresExclusiveTouchType", true)
+                .Add("UITapGestureRecognizer._imp", new NibArchive.Obj("UITapRecognizer"));
+            if (!Bool(e, "enabled", true))
+                o.Add("UIGestureRecognizer.enabled", false);
+            if (!Bool(e, "cancelsTouchesInView", true))
+                o.Add("UIGestureRecognizer.cancelsTouchesInView", false);
+            CollectConnections(e, o);
+            return o;
+        }
+
         // --- bars and items ----------------------------------------------------------------
 
         public NibArchive.Obj Bar(XElement? e, string className, Action<NibArchive.Obj> specific) =>
@@ -1059,7 +1513,13 @@ public static class InterfaceBuilder
                 return o;
             }
             if ((string?)f?.Attribute("style") is { } style)
-                throw new CompileError($"text style fonts ('{style}', Dynamic Type) are not supported; use a system font with a size");
+            {
+                // A Dynamic Type text style: UIKit sizes it for the user's text size.
+                o.Add("UIFontName", String(".SFUI-Regular")).Add("UIIBTextStyle", String(style)).Add("UIFontPointSize", new NibArchive.Double(0))
+                    .Add("UIFontTextStyleForScaling", null).Add("UIFontPointSizeForScaling", new NibArchive.Double(0))
+                    .Add("UIFontMaximumPointSizeAfterScaling", new NibArchive.Double(0)).Add("UIFontTraits", 0).Add("UISystemFont", true);
+                return o;
+            }
             (string Name, int Traits) = type switch
             {
                 "system" => (".SFUI-Regular", 0),
@@ -1090,7 +1550,16 @@ public static class InterfaceBuilder
                 return SystemColor(system, fallback is null ? (0, 0, 0, 1) : Components(fallback));
             }
             if ((string?)c.Attribute("name") is { } named)
-                throw new CompileError($"named colors from asset catalogs ('{named}') are not supported");
+            {
+                // A color from the app's asset catalog, by name; the storyboard records its value as a fallback.
+                var fallback = document.Element("resources")?.Elements("namedColor")
+                    .FirstOrDefault(n => (string?)n.Attribute("name") == named)?.Element("color");
+                var (nr, ng, nb, na) = fallback is null ? (0, 0, 0, 1) : Components(fallback);
+                var o = Color(nr, ng, nb, na);
+                o.Items.Insert(0, ("UIDynamicCatalogUseNibBundle", true));
+                o.Items.Insert(0, ("UIDynamicCatalogName", String(named)));
+                return o;
+            }
             var (r, g, b, a) = Components(c);
             return Color(r, g, b, a);
         }

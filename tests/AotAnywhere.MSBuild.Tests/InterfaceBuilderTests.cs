@@ -138,7 +138,7 @@ public class InterfaceBuilderTests
     public async Task UnsupportedElementsAreErrors()
     {
         var dir = Temp();
-        var xib = Xib.Replace("<label ", "<tableView ").Replace("</label>", "</tableView>");
+        var xib = Xib.Replace("<label ", "<pickerView ").Replace("</label>", "</pickerView>");
         await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Bad.xib", xib), dir)).Throws<InterfaceBuilder.CompileError>();
     }
 
@@ -377,17 +377,95 @@ public class InterfaceBuilderTests
     }
 
     [Test]
-    public async Task UnsupportedSeguesAndScenesAreErrors()
+    public async Task UnsupportedSeguesAndRecognizersAreErrors()
     {
         var dir = Temp();
+        // An unwind segue needs its action.
         await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Unwind.storyboard", Navigation.Replace("kind=\"show\"", "kind=\"unwind\"")), dir))
             .Throws<InterfaceBuilder.CompileError>();
-        // A table view controller scene (the second scene's controller, retagged).
-        var table = Navigation.Replace("<viewController id=\"SECOND\"", "<tableViewController id=\"SECOND\"");
-        int close = table.LastIndexOf("</viewController>", StringComparison.Ordinal);
-        table = table[..close] + "</tableViewController>" + table[(close + "</viewController>".Length)..];
-        await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Table.storyboard", table), dir))
+        var pan = Navigation.Replace("<placeholder placeholderIdentifier=\"IBFirstResponder\"", "<panGestureRecognizer minimumNumberOfTouches=\"1\" id=\"PAN\"/><placeholder placeholderIdentifier=\"IBFirstResponder\"");
+        await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Pan.storyboard", pan), dir))
             .Throws<InterfaceBuilder.CompileError>();
+    }
+
+    // test/ios/IBTest/Gaps.storyboard: checked at run time by the app, and against Apple's ibtool output.
+    static Dictionary<string, NibArchive> CompileGaps()
+    {
+        var dir = Temp();
+        var source = Path.Combine(Harness.RepoRoot, "test", "ios", "IBTest", "Gaps.storyboard");
+        InterfaceBuilder.Compile(Write(dir, "Gaps.storyboard", File.ReadAllText(source)), dir);
+        return Directory.GetFiles(Path.Combine(dir, "Gaps.storyboardc"), "*.nib")
+            .ToDictionary(f => Path.GetFileNameWithoutExtension(f)!, f => NibArchive.Read(File.ReadAllBytes(f)));
+    }
+
+    [Test]
+    public async Task PrototypeCellsCompileToTheirOwnNibs()
+    {
+        var nibs = CompileGaps();
+        var table = nibs["TVC-view-TV"].Objects.Single(o => o.ClassName == "UITableView");
+        var prototypes = (NibArchive.Obj)table["UITableViewCellPrototypeNibs"]!;
+        var reuseIds = prototypes.Items.Where(i => i.Value is NibArchive.Obj { ClassName: "NSString" }).Select(i => Str(i.Value)).ToList();
+        await Assert.That(reuseIds).IsEquivalentTo(new[] { "Cell", "Detail" });
+        var uinib = prototypes.Items.Select(i => i.Value).OfType<NibArchive.Obj>().First(o => o.ClassName == "UINib");
+        var cellNib = NibArchive.Read((byte[])((NibArchive.Obj)uinib["archiveData"]!)["NS.bytes"]!);
+        var cell = cellNib.Objects.Single(o => o.ClassName == "UITableViewCell");
+        await Assert.That(Str(cell["UIReuseIdentifier"])).IsEqualTo("Cell");
+        await Assert.That(((NibArchive.Obj)cell["UITextLabel"]!).ClassName).IsEqualTo("UITableViewLabel");
+        // The cell's unwind segue lives in the controller nib: reached through an upstream placeholder.
+        var proxies = cellNib.Objects.Where(o => o.ClassName == "UIProxyObject").Select(o => Str(o["UIProxiedObjectIdentifier"])).ToList();
+        await Assert.That(proxies).Contains("UpstreamPlaceholder-1");
+        await Assert.That(cellNib.Objects.Any(o => o.ClassName == "UIRuntimeOutletConnection" && Str(o["UILabel"]) == "selectionSegueTemplate")).IsTrue();
+        var detailNib = NibArchive.Read((byte[])((NibArchive.Obj)prototypes.Items.Select(i => i.Value).OfType<NibArchive.Obj>()
+            .Where(o => o.ClassName == "UINib").Last()["archiveData"]!)["NS.bytes"]!);
+        var detail = detailNib.Objects.Single(o => o.ClassName == "UITableViewCell");
+        await Assert.That(detail["UITableViewCellStyle"]).IsEqualTo(1);
+        await Assert.That(detail["UIAccessoryType"]).IsEqualTo(1);
+        await Assert.That(detail["UISelectionStyle"]).IsEqualTo(0);
+
+        var controller = nibs["UITableViewController-TVC"];
+        var unwind = controller.Objects.Single(o => o.ClassName == "UIStoryboardUnwindSegueTemplate");
+        await Assert.That(Str(unwind["UIAction"])).IsEqualTo("backToGaps:");
+    }
+
+    [Test]
+    public async Task CollectionViewsStaticTablesAndReferencesCompile()
+    {
+        var nibs = CompileGaps();
+        var layout = nibs["CVC-view-CV"].Objects.Single(o => o.ClassName == "UICollectionViewFlowLayout");
+        await Assert.That(layout["UILineSpacing"]).IsEqualTo(4f);
+        await Assert.That(layout["UIInteritemSpacing"]).IsEqualTo(6f);
+        await Assert.That(layout["UIScrollDirection"]).IsEqualTo(1);
+
+        var settings = nibs["STC-view-STV"];
+        var source = settings.Objects.Single(o => o.ClassName == "UITableViewDataSource");
+        await Assert.That(settings.Objects.Any(o => o.ClassName == "UIRuntimeOutletConnection" && Str(o["UILabel"]) == "staticDataSource" && o["UIDestination"] == source)).IsTrue();
+        var section = settings.Objects.Single(o => o.ClassName == "UITableViewSection");
+        await Assert.That(Str(section["UITableSectionHeaderTitle"])).IsEqualTo("General");
+        await Assert.That(Str(section["UITableSectionFooterTitle"])).IsEqualTo("Footer");
+
+        var reference = nibs["UIViewController-REF"].Objects.Single(o => o.ClassName == "UIStoryboardViewControllerPlaceholder");
+        await Assert.That(reference["UIStoryboardIdentifier"]).IsNotNull();
+    }
+
+    [Test]
+    public async Task RecognizersConfigurationsTextStylesAndCatalogColorsCompile()
+    {
+        var nibs = CompileGaps();
+        var view = nibs["MAIN-view-V"];
+        var config = view.Objects.Single(o => o.ClassName == "UIButtonConfiguration");
+        await Assert.That(config["UIButtonConfigurationButtonStyle"]).IsEqualTo(3);
+        await Assert.That(Str(((NibArchive.Obj)config["UIButtonConfigurationTitle"]!)["NSString"])).IsEqualTo("Filled");
+        var label = view.Objects.Single(o => o.ClassName == "UILabel");
+        await Assert.That(label["UIAdjustsFontForContentSizeCategory"]).IsEqualTo(true);
+        await Assert.That(Str(((NibArchive.Obj)label["UIFont"]!)["UIIBTextStyle"])).IsEqualTo("UICTFontTextStyleBody");
+        var color = (NibArchive.Obj)label["UITextColor"]!;
+        await Assert.That(Str(color["UIDynamicCatalogName"])).IsEqualTo("Brand");
+        await Assert.That(color["UIRed"]).IsEqualTo(0.2f);
+        // The scene's tap recognizer is kept alive by the controller, and the view reaches it as an external object.
+        var controller = nibs["UINavigationController-NAV"];
+        var tap = controller.Objects.Single(o => o.ClassName == "UITapGestureRecognizer");
+        await Assert.That(controller.Objects.Any(o => o.ClassName == "UIRuntimeEventConnection" && Str(o["UILabel"]) == "tapped:" && o["UISource"] == tap)).IsTrue();
+        await Assert.That(view.Objects.Any(o => o.ClassName == "UIRuntimeOutletCollectionConnection" && Str(o["UILabel"]) == "gestureRecognizers")).IsTrue();
     }
 
     [Test]

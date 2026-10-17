@@ -27,14 +27,22 @@ static class Generator
 
     static readonly string[] Rids = ["ios-arm64", "iossimulator-arm64", "iossimulator-x64"];
 
-    // The iOS workload's packs. The SDK version is the one the workload's packs target ("_27.0").
-    const string IosSdkVersion = "27.0";
+    // The iOS workload versions the stubs serve, newest first (CI builds with each:
+    // .github/workflows/ios-validation.yml). Each brings its own runtime pack (whose native code
+    // imports different symbols) and Microsoft.iOS.dll; the stubs carry the union. The SDK version
+    // zig records is the newest's.
+    static readonly (string SdkVersion, string PackVersion)[] Workloads =
+    [
+        ("27.0", "27.0.10722"),
+        ("26.5", "26.5.10318"),
+        ("26.0", "26.0.11017"),
+    ];
+    static string IosSdkVersion => Workloads[0].SdkVersion;
     static readonly (string Id, string Version)[] RuntimePacks =
     [
         ("microsoft.netcore.app.runtime.nativeaot.{rid}", "10.0.13"),
-        ("microsoft.ios.runtime.{rid}.net10.0_" + IosSdkVersion, "27.0.10722"),
+        .. Workloads.Select(w => ("microsoft.ios.runtime.{rid}.net10.0_" + w.SdkVersion, w.PackVersion)),
     ];
-    static readonly (string Id, string Version) PlatformAssemblyPack = ("microsoft.ios.runtime.ios.net10.0_" + IosSdkVersion, "27.0.10722");
 
     // Third-party static libraries apps commonly link: (package, version, zip inside the package, member of that zip).
     static readonly (string Id, string Version, string ZipEntry, string Member)[] ThirdParty =
@@ -61,11 +69,15 @@ static class Generator
         foreach (var (id, version, zipEntry, member) in ThirdParty)
             native.Add(await FetchZipMemberAsync(id, version, zipEntry, member));
 
-        string platformDir = await FetchAsync(PlatformAssemblyPack.Id, PlatformAssemblyPack.Version, e => e.EndsWith("/Microsoft.iOS.dll", StringComparison.Ordinal));
-        string platformAssembly = Directory.EnumerateFiles(platformDir, "Microsoft.iOS.dll", SearchOption.AllDirectories).First();
+        var platformAssemblies = new List<string>();
+        foreach (var (sdk, version) in Workloads)
+        {
+            string platformDir = await FetchAsync("microsoft.ios.runtime.ios.net10.0_" + sdk, version, e => e.EndsWith("/Microsoft.iOS.dll", StringComparison.Ordinal));
+            platformAssemblies.Add(Directory.EnumerateFiles(platformDir, "Microsoft.iOS.dll", SearchOption.AllDirectories).First());
+        }
         string zigLibSystem = Path.Combine(ZigLibDir(zig), "libc", "darwin", "libSystem.tbd");
 
-        var result = IosStubs.Generate(new IosStubs.Inputs(native, platformAssembly, zigLibSystem, IosSdkVersion), OutputDir);
+        var result = IosStubs.Generate(new IosStubs.Inputs(native, platformAssemblies, zigLibSystem, IosSdkVersion), OutputDir);
 
         Console.WriteLine($"{result.Wanted} symbols, {result.Attributed} stubbed in {result.Libraries} libraries ({result.Files} stub files) -> {Path.GetRelativePath(RepoRoot, OutputDir)}");
         Console.WriteLine($"{result.Unattributed.Count} not stubbed (expected: the app's own objects define them, the linker synthesizes them, or they are toolchain-only):");

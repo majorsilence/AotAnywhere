@@ -7,8 +7,9 @@ exports:
   - targets:         [ arm64-ios, arm64e-ios, arm64-ios-simulator, x86_64-ios-simulator ]
     symbols:          [ _MLAllComputeDevices, _MLFeatureValueImageOptionCropAndScale,
                         _MLFeatureValueImageOptionCropRect, _MLModelAuthorKey,
-                        _MLModelCreatorDefinedKey, _MLModelDescriptionKey, _MLModelErrorDomain,
-                        _MLModelLicenseKey, _MLModelVersionStringKey ]
+                        _MLModelCollectionDidChangeNotification, _MLModelCreatorDefinedKey,
+                        _MLModelDescriptionKey, _MLModelErrorDomain, _MLModelLicenseKey,
+                        _MLModelVersionStringKey ]
     objc-classes:     [ MLArrayBatchProvider, MLCPUComputeDevice, MLComputePlan, MLComputePlanCost,
                         MLComputePlanDeviceUsage, MLDictionaryConstraint,
                         MLDictionaryFeatureProvider, MLFeatureDescription, MLFeatureValue,

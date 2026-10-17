@@ -32,6 +32,8 @@ static class Tools
         "ibtool" => IbTool(args),
         "actool" => AcTool(args),
         "car-dump" => Print(CarWriter.Dump(File.ReadAllBytes(args[0]))),
+        // vector-render <in.pdf|in.svg> <scale> <out.png>: how actool rasterizes a vector image.
+        "vector-render" => Done(() => File.WriteAllBytes(args[2], VectorImage.Render(VectorImage.Load(File.ReadAllBytes(args[0]), Path.GetExtension(args[0])), double.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture)).Encode())),
         "nib-dump" => Print(NibArchive.Read(File.ReadAllBytes(args[0])).Dump()),
         // Spotlight indexing of the build output; meaningless off-Mac.
         "mdimport" => 0,
@@ -121,11 +123,14 @@ static class Tools
             // Stub links decide which autolinked libraries are used in StubLink, after applying
             // the stubs' back-deployment directives; SDK links decide here.
             var added = Autolink(args, inv.Args, stubs is null, out var missing, out referenced, out weakOnly);
+            var compatibility = missing.Where(l => l.StartsWith("swiftCompatibility", StringComparison.Ordinal)).ToList();
             inv = inv with
             {
                 Args = [.. inv.Args, .. added],
-                ExtraAssembly = missing.Where(l => l.StartsWith("swiftCompatibility", StringComparison.Ordinal)).Select(ClangToZig.ForceLoadAssembly).ToList(),
+                ExtraAssembly = compatibility.Select(ClangToZig.ForceLoadAssembly).ToList(),
             };
+            foreach (var warning in ClangToZig.BackDeploymentWarnings(compatibility, ClangToZig.TargetOf(inv)))
+                Console.Error.WriteLine("AotAnywhere: warning: " + warning);
         }
         // Stub links bind through a per-link copy of the stubs (see StubLink).
         string? linkSysroot = null;
@@ -433,6 +438,8 @@ static class Tools
             }
             catch (Exception e) when (e is InterfaceBuilder.CompileError or System.Xml.XmlException)
             {
+                if (Environment.GetEnvironmentVariable("AOTANYWHERE_IBTOOL_TRACE") is { Length: > 0 })
+                    Console.Error.WriteLine(e);
                 errors.Add(new Dictionary<string, object>(StringComparer.Ordinal)
                 {
                     ["description"] = $"{input}: {e.Message} (see docs/ios-targets.md for what AotAnywhere's ibtool supports; build on a Mac with Xcode for anything else)",

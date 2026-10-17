@@ -1,8 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- iOS validation app for StuDev.AotAnywhere.Apple (see .github/workflows/ios-validation.yml):
-       three storyboards (navigation, controls and segues; tab bar) whose controllers drive their
-       own outlets, actions and segues on launch and log "IBTEST <storyboard> ok", plus an app icon
-       asset catalog. Launch it with the storyboard option set to Showcase, Controls or Tabbed
+       storyboards (navigation, controls and segues; tab bar; tables, collections, gestures,
+       unwind segues and a storyboard reference) whose controllers drive their own outlets,
+       actions and segues on launch and log "IBTEST <storyboard> ok", plus an asset catalog
+       (app icon, colours, vector and dark-mode images, data) checked the same way. Launch it with
+       the storyboard option set to Showcase, Controls, Tabbed, Gaps or Assets
        (test/ios/run-sim.py). Builds against the package sources through Directory.Build.targets. -->
   <PropertyGroup>
     <TargetFramework>net10.0-ios</TargetFramework>

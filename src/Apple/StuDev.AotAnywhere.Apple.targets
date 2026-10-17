@@ -33,7 +33,10 @@
     <_AotAnywhereSyntheticXcode Condition="'$(AotAnywhereXcodeDir)' == ''">true</_AotAnywhereSyntheticXcode>
     <AotAnywhereXcodeDir Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'">$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'aotanywhere-xcode', 'Xcode.app').TrimEnd('/').TrimEnd('\'))</AotAnywhereXcodeDir>
     <_AotAnywhereSyntheticSdkVersion>$(_XamarinTargetPlatformVersionExecutable)</_AotAnywhereSyntheticSdkVersion>
-    <_AotAnywhereSyntheticSdkVersion Condition="'$(_AotAnywhereSyntheticSdkVersion)' == ''">$(RecommendedXcodeVersion)</_AotAnywhereSyntheticSdkVersion>
+    <!-- The Xcode the workload expects: public from Microsoft.iOS.Sdk 27.0, private before. -->
+    <_AotAnywhereXcodeVersion>$(RecommendedXcodeVersion)</_AotAnywhereXcodeVersion>
+    <_AotAnywhereXcodeVersion Condition="'$(_AotAnywhereXcodeVersion)' == ''">$(_RecommendedXcodeVersion)</_AotAnywhereXcodeVersion>
+    <_AotAnywhereSyntheticSdkVersion Condition="'$(_AotAnywhereSyntheticSdkVersion)' == ''">$(_AotAnywhereXcodeVersion)</_AotAnywhereSyntheticSdkVersion>
     <AotAnywhereAppleGeneratedHeaders Condition="'$(AotAnywhereAppleGeneratedHeaders)' == '' and '$(_AotAnywhereSyntheticXcode)' == 'true'">true</AotAnywhereAppleGeneratedHeaders>
     <AotAnywhereAppleLinkStubs Condition="'$(AotAnywhereAppleLinkStubs)' == '' and '$(_AotAnywhereSyntheticXcode)' == 'true'">true</AotAnywhereAppleLinkStubs>
 
@@ -206,12 +209,12 @@
 
     <Error Condition="!Exists('$(AotAnywhereAppleToolsDir)AotAnywhere.AppleTools.dll')"
            Text="AotAnywhere: AotAnywhere.AppleTools.dll was not found in '$(AotAnywhereAppleToolsDir)'. For a source build, run `dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release` first." />
-    <Error Condition="'$(_AotAnywhereSyntheticXcode)' == 'true' and ('$(RecommendedXcodeVersion)' == '' or '$(_AotAnywhereSyntheticSdkVersion)' == '')"
+    <Error Condition="'$(_AotAnywhereSyntheticXcode)' == 'true' and ('$(_AotAnywhereXcodeVersion)' == '' or '$(_AotAnywhereSyntheticSdkVersion)' == '')"
            Text="AotAnywhere: the iOS workload's RecommendedXcodeVersion / SDK version properties were not found, so no stand-in Xcode can be generated. Set AotAnywhereXcodeDir to an Xcode folder." />
     <Error Condition="'$(_AotAnywhereSyntheticXcode)' == 'true' and ('$(AotAnywhereAppleGeneratedHeaders)' != 'true' or '$(AotAnywhereAppleLinkStubs)' != 'true')"
            Text="AotAnywhere: without an Xcode (AotAnywhereXcodeDir) there are no SDK headers or libraries, so AotAnywhereAppleGeneratedHeaders and AotAnywhereAppleLinkStubs must stay enabled." />
     <Exec Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'"
-          Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; synthetic-xcode --out &quot;$(AotAnywhereXcodeDir)&quot; --xcode-version $(RecommendedXcodeVersion) --sdk-version $(_AotAnywhereSyntheticSdkVersion)"
+          Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; synthetic-xcode --out &quot;$(AotAnywhereXcodeDir)&quot; --xcode-version $(_AotAnywhereXcodeVersion) --sdk-version $(_AotAnywhereSyntheticSdkVersion)"
           StandardOutputImportance="Low" />
     <Error Condition="!Exists('$(AotAnywhereXcodeDir)/Contents/version.plist')"
            Text="AotAnywhere: no Xcode found at '$(AotAnywhereXcodeDir)'. Set AotAnywhereXcodeDir to an Xcode folder, or leave it unset to build without one." />

@@ -26,13 +26,16 @@ public sealed class Bom
     public void AddTree(string name, IEnumerable<(byte[] Key, byte[] Value)> entries, int nodeSize = 4096)
     {
         var sorted = entries.OrderBy(e => e.Key, ByteOrder.Instance).ToList();
-        // A leaf is the node header and the (value, key) block pairs, then 4 zero bytes and a copy
-        // of every key back to back; CoreUI compares against those inline keys, not the key blocks.
-        // The node is at least the tree's node size, plus the inline keys. (The inline copy isn't in
-        // xcbuild's writer; it was found by checking against Apple-compiled catalogs.)
+        // A leaf is the node header and the (value, key) block pairs. When every key has the same
+        // length (rendition keys), that length is recorded in the tree and the leaf also carries, after
+        // 4 zero bytes, a copy of every key back to back - CoreUI compares against those, not the key
+        // blocks - so the node is the tree's node size plus the inline keys. Trees of variable-length
+        // keys (names) record 0xffffffff and have no inline copy. (Neither detail is in xcbuild's
+        // writer; both were found by checking against Apple-compiled catalogs.)
         if (16 + 8 * sorted.Count > nodeSize)
             throw new ArgumentException($"BOM tree {name} has too many entries for one leaf");
-        var leaf = new byte[nodeSize + sorted.Sum(e => e.Key.Length)];
+        bool fixedKeys = sorted.Count > 0 && sorted.All(e => e.Key.Length == sorted[0].Key.Length);
+        var leaf = new byte[nodeSize + (fixedKeys ? sorted.Sum(e => e.Key.Length) : 0)];
         BinaryPrimitives.WriteUInt16BigEndian(leaf, 1); // is_leaf
         BinaryPrimitives.WriteUInt16BigEndian(leaf.AsSpan(2), checked((ushort)sorted.Count));
         for (int i = 0; i < sorted.Count; i++)
@@ -40,11 +43,14 @@ public sealed class Bom
             BinaryPrimitives.WriteUInt32BigEndian(leaf.AsSpan(12 + 8 * i), (uint)AddBlock(sorted[i].Value));
             BinaryPrimitives.WriteUInt32BigEndian(leaf.AsSpan(16 + 8 * i), (uint)AddBlock(sorted[i].Key));
         }
-        int inline = 16 + 8 * sorted.Count;
-        foreach (var (key, _) in sorted)
+        if (fixedKeys)
         {
-            key.CopyTo(leaf, inline);
-            inline += key.Length;
+            int inline = 16 + 8 * sorted.Count;
+            foreach (var (key, _) in sorted)
+            {
+                key.CopyTo(leaf, inline);
+                inline += key.Length;
+            }
         }
         int leafBlock = AddBlock(leaf);
 
@@ -54,8 +60,8 @@ public sealed class Bom
         BinaryPrimitives.WriteUInt32BigEndian(tree.AsSpan(8), (uint)leafBlock);
         BinaryPrimitives.WriteUInt32BigEndian(tree.AsSpan(12), (uint)nodeSize);
         BinaryPrimitives.WriteUInt32BigEndian(tree.AsSpan(16), (uint)sorted.Count);
-        // Byte 20 is a flag (0 here); then the key length (the longest key, for variable-length keys).
-        BinaryPrimitives.WriteUInt32BigEndian(tree.AsSpan(21), (uint)sorted.Select(e => e.Key.Length).DefaultIfEmpty().Max());
+        // Byte 20 is a flag (0 here); then the key length, or 0xffffffff for variable-length keys.
+        BinaryPrimitives.WriteUInt32BigEndian(tree.AsSpan(21), fixedKeys ? (uint)sorted[0].Key.Length : 0xffffffff);
         _variables.Add((name, AddBlock(tree)));
     }
 

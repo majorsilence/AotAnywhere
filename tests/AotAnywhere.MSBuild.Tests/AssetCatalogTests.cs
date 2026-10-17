@@ -123,11 +123,68 @@ public class AssetCatalogTests
         await Assert.That((r.Attributes[CarWriter.Scale], r.Attributes[CarWriter.Part], r.Width)).IsEqualTo(((ushort)2, (ushort)181, 8));
     }
 
+    // test/ios/IBTest's catalog: checked at run time by the app's Assets self-test.
+    [Test]
+    public async Task ColorDataVectorAndDarkVariantRenditions()
+    {
+        var dir = Temp();
+        string catalog = Path.Combine(Harness.RepoRoot, "test", "ios", "IBTest", "Assets.xcassets");
+        AssetCatalog.Compile([catalog], Options(dir) with { AppIcon = null });
+        var car = File.ReadAllBytes(Path.Combine(dir, "bundle", "Assets.car"));
+        await Assert.That(CarWriter.ReadFacets(car).Keys).IsEquivalentTo(new[] { "Brand", "Config", "Glyph", "Logo", "Photo" });
+        var renditions = CarWriter.ReadRenditions(car);
+        var facets = CarWriter.ReadFacets(car);
+        List<(Dictionary<ushort, ushort> Attributes, int Layout, int Width, int Height, string Name, byte[] Value)> Of(string name) =>
+            renditions.Where(r => r.Attributes[CarWriter.Element] == facets[name][CarWriter.Element]
+                && r.Attributes.GetValueOrDefault(CarWriter.Identifier) == facets[name].GetValueOrDefault(CarWriter.Identifier)).ToList();
+
+        var brand = Of("Brand");
+        await Assert.That(brand.Select(r => r.Layout).Distinct()).IsEquivalentTo(new[] { 1009 });
+        await Assert.That(brand.Select(r => r.Attributes.GetValueOrDefault(CarWriter.Appearance))).IsEquivalentTo(new ushort[] { 0, CarWriter.AppearanceDark });
+        await Assert.That(Of("Config").Single().Layout).IsEqualTo(1000);
+        // Vectors keep their source, plus bitmaps at each scale for UIKit.
+        foreach (var (name, points) in new[] { ("Logo", 32), ("Glyph", 24) })
+        {
+            var set = Of(name);
+            await Assert.That(set.Count(r => r.Layout == 9)).IsEqualTo(1);
+            await Assert.That(set.Where(r => r.Layout != 9).Select(r => r.Width)).IsEquivalentTo(new[] { points, points * 2, points * 3 });
+        }
+        await Assert.That(Of("Photo").Select(r => r.Attributes.GetValueOrDefault(CarWriter.Appearance)).Distinct().Count()).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task VectorImagesRasterize()
+    {
+        static (byte R, byte G, byte B, byte A) Pixel(Png png, int x, int y)
+        {
+            int i = (y * png.Width + x) * 4;
+            return (png.Rgba[i], png.Rgba[i + 1], png.Rgba[i + 2], png.Rgba[i + 3]);
+        }
+        var svg = VectorImage.Load("""<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect x="0" y="0" width="5" height="10" fill="#ff0000"/></svg>"""u8.ToArray(), ".svg");
+        var png = VectorImage.Render(svg, 2);
+        await Assert.That(png.Width).IsEqualTo(20);
+        await Assert.That(Pixel(png, 2, 10)).IsEqualTo(((byte)255, (byte)0, (byte)0, (byte)255));
+        await Assert.That(Pixel(png, 17, 10).A).IsEqualTo((byte)0);
+
+        // A one-page PDF filling its right half blue (PDF's origin is bottom-left).
+        string content = "0 0 1 rg 5 0 5 10 re f";
+        string pdf = $"%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n" +
+            $"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] /Contents 4 0 R >> endobj\n" +
+            $"4 0 obj << /Length {content.Length} >> stream\n{content}\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n";
+        png = VectorImage.Render(VectorImage.Load(System.Text.Encoding.ASCII.GetBytes(pdf), ".pdf"), 1);
+        await Assert.That(Pixel(png, 8, 5)).IsEqualTo(((byte)0, (byte)0, (byte)255, (byte)255));
+        await Assert.That(Pixel(png, 1, 5).A).IsEqualTo((byte)0);
+
+        await Assert.That(() => VectorImage.Load("""<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><linearGradient id="g"/></svg>"""u8.ToArray(), ".svg"))
+            .Throws<Exception>();
+    }
+
     [Test]
     public async Task UnsupportedAssetsAndMissingIconsAreErrors()
     {
         var dir = Temp();
-        Directory.CreateDirectory(Path.Combine(dir, "A.xcassets", "AccentColor.colorset"));
+        string accent = Directory.CreateDirectory(Path.Combine(dir, "A.xcassets", "AccentColor.colorset")).FullName;
+        File.WriteAllText(Path.Combine(accent, "Contents.json"), """{ "colors": [ { "idiom": "universal", "color": { "platform": "ios", "reference": "systemBlueColor" } } ] }""");
         await Assert.That(() => AssetCatalog.Compile([Path.Combine(dir, "A.xcassets")], Options(dir) with { AppIcon = null }))
             .Throws<AssetCatalog.CompileError>();
 

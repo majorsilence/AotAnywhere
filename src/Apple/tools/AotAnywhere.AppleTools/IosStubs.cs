@@ -100,10 +100,11 @@ public static class IosStubs
 
     /// <summary>What to generate from.</summary>
     /// <param name="NativeInputs">Static libraries and objects whose undefined symbols apps import (runtime packs, third-party libraries).</param>
-    /// <param name="PlatformAssembly">Microsoft.iOS.dll.</param>
+    /// <param name="PlatformAssemblies">Microsoft.iOS.dll of every workload version the stubs serve, newest first:
+    /// symbols are the union; where versions disagree on a framework mapping the newest wins.</param>
     /// <param name="ZigLibSystem">zig's <c>lib/libc/darwin/libSystem.tbd</c>.</param>
     /// <param name="SdkVersion">The iOS SDK version the workload targets (zig records it in LC_BUILD_VERSION).</param>
-    public sealed record Inputs(IReadOnlyList<string> NativeInputs, string PlatformAssembly, string ZigLibSystem, string SdkVersion);
+    public sealed record Inputs(IReadOnlyList<string> NativeInputs, IReadOnlyList<string> PlatformAssemblies, string ZigLibSystem, string SdkVersion);
 
     public sealed record Result(int Wanted, int Attributed, int Libraries, int Files, IReadOnlyList<string> Unattributed);
 
@@ -139,8 +140,9 @@ public static class IosStubs
         var objects = inputs.NativeInputs.SelectMany(MachoAutolink.ReadObjects).ToList();
         foreach (var s in External(objects))
             Want(s, null);
-        foreach (var b in BindingSymbols.Read(inputs.PlatformAssembly))
-            Want(b.Symbol, b.Library);
+        foreach (var assembly in inputs.PlatformAssemblies)
+            foreach (var b in BindingSymbols.Read(assembly))
+                Want(b.Symbol, b.Library);
         foreach (var s in CxxRuntime)
             Want(s, LibCxx);
         var zigLibSystem = Tbd.Parse(File.ReadAllText(inputs.ZigLibSystem))
@@ -152,8 +154,8 @@ public static class IosStubs
             zigLibSystem,
             Autolinked(objects, "-l", "swift"),
             Autolinked(objects, "-framework", ""),
-            BindingSymbols.FrameworkConstants(inputs.PlatformAssembly),
-            BindingSymbols.NamespaceLibraries(inputs.PlatformAssembly));
+            inputs.PlatformAssemblies.SelectMany(BindingSymbols.FrameworkConstants).ToHashSet(StringComparer.Ordinal),
+            NewestWins(inputs.PlatformAssemblies.Select(BindingSymbols.NamespaceLibraries)));
 
         var assigned = new Dictionary<string, Dictionary<string, HashSet<string>>>(StringComparer.Ordinal); // install name -> list key -> symbols
         var unattributed = new List<string>();
@@ -199,6 +201,15 @@ public static class IosStubs
 
         int attributed = assigned.Values.Sum(k => k.Values.Sum(v => v.Count(s => !s.StartsWith("$ld$", StringComparison.Ordinal))));
         return new Result(wanted.Count, attributed, assigned.Count(a => a.Value.Count > 0), files, unattributed);
+    }
+
+    static Dictionary<string, string> NewestWins(IEnumerable<Dictionary<string, string>> newestFirst)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var map in newestFirst)
+            foreach (var (k, v) in map)
+                result.TryAdd(k, v);
+        return result;
     }
 
     /// <summary>Everything the attribution rules look at besides the symbol.</summary>
