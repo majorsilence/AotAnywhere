@@ -29,6 +29,7 @@ static class Tools
         "objc-shims" => ObjCShimsTool(args),
         "synthetic-xcode" => SyntheticXcodeTool(args),
         "ditto" => RunDitto(args),
+        "derq" => Derq(args),
         "ibtool" => IbTool(args),
         "actool" => AcTool(args),
         "car-dump" => Print(CarWriter.Dump(File.ReadAllBytes(args[0]))),
@@ -47,6 +48,30 @@ static class Tools
         _ when OperatingSystem.IsMacOS() && File.Exists(AppleXcrun) => Exec(AppleXcrun, [tool, .. args], AppleToolEnvironment()),
         _ => throw new AppleToolException($"AotAnywhere: the Xcode tool '{tool}' is not available off-Mac. If the project uses a feature that needs it (Metal shaders, Core ML models, SceneKit assets, ...), it can only be built on a Mac with Xcode."),
     };
+
+    // derq query -f xml -i <entitlements.plist> -o <out.der> --raw: the DER form of a simulator
+    // app's entitlements, which the workload links into its __TEXT,__ents_der section.
+    static int Derq(List<string> args)
+    {
+        string? input = null, output = null, format = null;
+        bool raw = false;
+        for (int i = 0; i < args.Count; i++)
+        {
+            switch (args[i])
+            {
+                case "query": break;
+                case "-f": format = args[++i]; break;
+                case "-i": input = args[++i]; break;
+                case "-o": output = args[++i]; break;
+                case "--raw": raw = true; break;
+                default: throw new AppleToolException($"AotAnywhere: derq: unsupported argument '{args[i]}'.");
+            }
+        }
+        if (format is not ("xml" or null) || !raw || input is null || output is null)
+            throw new AppleToolException("AotAnywhere: derq: only 'derq query -f xml -i <plist> -o <der> --raw' is supported.");
+        File.WriteAllBytes(output, EntitlementsDer.Encode(Plist.ReadDictionary(File.ReadAllBytes(input))));
+        return 0;
+    }
 
     const string AppleXcrun = "/usr/bin/xcrun";
 

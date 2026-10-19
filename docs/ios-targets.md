@@ -42,6 +42,28 @@ Native AOT is required: the Mono runtime's iOS AOT compiler only exists for
 macOS hosts. Simulator RIDs can't be `dotnet publish`ed, hence the
 `build -p:_IsPublishing=true` form.
 
+### Installing the iOS workload
+
+On macOS and Windows: `dotnet workload install ios`. On Linux that command refuses
+to run, because the workload pulls in Mono's iOS AOT compilers, which only exist
+for macOS and Windows. Native AOT doesn't use them, so install the rest of the
+workload with the repository's script instead (into a .NET install you can write
+to):
+
+```sh
+eng/install-ios-packs.sh            # the newest iOS workload
+eng/install-ios-packs.sh 26.5.10318 # or a given version
+```
+
+It pins the iOS workload manifest and unpacks its SDK, reference and runtime packs
+(and the Mono build tooling the SDK imports) from nuget.org. No workload is
+recorded as installed, so a later `dotnet workload` command may remove the packs
+as unused; run the script again afterwards.
+
+Off a Mac, projects with storyboards or asset catalogs need iOS workload 26.5 or
+later: earlier workloads run `actool` and `ibtool` through `/usr/bin/xcrun`, which
+only exists on macOS.
+
 ### On Windows
 
 The workload's Windows layer normally sends the build to a paired Mac. The package
