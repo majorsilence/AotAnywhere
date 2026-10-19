@@ -20,8 +20,9 @@ public static class ZipTool
 
     sealed record Entry(string Name, int Mode, Func<byte[]>? Data, string? LinkTarget);
 
-    // zip [-r] [-y] [-q] [-9|-0..] <archive> <path>...   (paths relative to the current directory)
-    public static void Run(IReadOnlyList<string> args)
+    // zip [-r] [-y] [-q] [-9|-0..] <archive> <path>...   (paths relative to the current directory,
+    // or to baseDirectory; entries are named by the paths as given)
+    public static void Run(IReadOnlyList<string> args, string? baseDirectory = null)
     {
         bool recurse = false, symlinks = false;
         var level = CompressionLevel.Optimal;
@@ -49,15 +50,18 @@ public static class ZipTool
             throw new AppleToolException("usage: zip [-r] [-y] [-9] <archive> <path>...");
 
         var entries = new List<Entry>();
+        string Full(string path) => baseDirectory is null ? path : Path.Combine(baseDirectory, path);
         foreach (var path in operands.Skip(1))
-            Collect(path.TrimEnd('/', '\\'), recurse, symlinks, entries);
+        {
+            string name = path.TrimEnd('/', '\\');
+            Collect(Full(name), name.Replace('\\', '/'), recurse, symlinks, entries);
+        }
         // `zip` adds to an existing archive; the workload deletes it first, so a fresh one is right.
-        Write(operands[0], entries, level);
+        Write(Full(operands[0]), entries, level);
     }
 
-    static void Collect(string path, bool recurse, bool symlinks, List<Entry> entries)
+    static void Collect(string path, string name, bool recurse, bool symlinks, List<Entry> entries)
     {
-        string name = path.Replace('\\', '/');
         var info = new FileInfo(path);
         if (symlinks && info.LinkTarget is { } target)
         {
@@ -69,7 +73,7 @@ public static class ZipTool
             entries.Add(new Entry(name + "/", ModeOf(path, DirMode), null, null));
             if (recurse)
                 foreach (var child in Directory.EnumerateFileSystemEntries(path).Order(StringComparer.Ordinal))
-                    Collect(child, recurse, symlinks, entries);
+                    Collect(child, name + "/" + Path.GetFileName(child), recurse, symlinks, entries);
             return;
         }
         if (!info.Exists)

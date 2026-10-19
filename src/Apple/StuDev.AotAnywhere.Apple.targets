@@ -59,6 +59,9 @@
     <ParameterGroup>
       <Variables ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
       <PrependToPath ParameterType="System.String" Required="true" />
+      <!-- Off a Mac: the stand-in for macOS's C library, and the tools assembly that redirects to it. -->
+      <DarwinShim ParameterType="System.String" />
+      <ToolsAssembly ParameterType="System.String" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System" />
@@ -70,6 +73,24 @@
           var path = Environment.GetEnvironmentVariable("PATH") ?? "";
           if (!path.StartsWith(PrependToPath + Path.PathSeparator, StringComparison.Ordinal))
             Environment.SetEnvironmentVariable("PATH", PrependToPath + Path.PathSeparator + path);
+          if (!string.IsNullOrEmpty(DarwinShim) && !string.IsNullOrEmpty(ToolsAssembly))
+          {
+            // Child dotnet processes (the trimmer) redirect through a startup hook...
+            Environment.SetEnvironmentVariable("AOTANYWHERE_DARWIN_SHIM", DarwinShim);
+            var hooks = Environment.GetEnvironmentVariable("DOTNET_STARTUP_HOOKS") ?? "";
+            if (hooks.IndexOf(ToolsAssembly, StringComparison.Ordinal) < 0)
+              Environment.SetEnvironmentVariable("DOTNET_STARTUP_HOOKS", hooks.Length == 0 ? ToolsAssembly : hooks + Path.PathSeparator + ToolsAssembly);
+            // ...and the workload's tasks in this process directly.
+            try
+            {
+              System.Reflection.Assembly.LoadFrom(ToolsAssembly).GetType("AotAnywhere.AppleTools.NativeAliases", true)
+                .GetMethod("Install").Invoke(null, new object[] { DarwinShim });
+            }
+            catch (Exception e)
+            {
+              Log.LogWarning("AotAnywhere: could not redirect the workload's macOS C library calls in this build process: " + e.Message);
+            }
+          }
         ]]>
       </Code>
     </Task>
@@ -183,6 +204,9 @@
          tools/launcher; a source build uses the copy in the repository. -->
     <_AotAnywhereLauncherSource>$(MSBuildThisFileDirectory)tools/launcher/aotanywhere-tool.c</_AotAnywhereLauncherSource>
     <_AotAnywhereLauncherExe>$(_AotAnywhereAppleBin)/aotanywhere-tool.exe</_AotAnywhereLauncherExe>
+    <!-- Linux: a stand-in for macOS's C library, which the workload's tasks and trimmer steps P/Invoke (darwin-shim.c). -->
+    <_AotAnywhereDarwinShimSource>$(MSBuildThisFileDirectory)tools/launcher/darwin-shim.c</_AotAnywhereDarwinShimSource>
+    <_AotAnywhereDarwinShim Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(_AotAnywhereAppleBin)/libaotanywhere-darwin.so</_AotAnywhereDarwinShim>
     <!-- And a libc.dll for the workload's trimmer steps, which P/Invoke libc's realpath on every host. -->
     <_AotAnywhereLibcShimSource>$(MSBuildThisFileDirectory)tools/launcher/libc-shim.c</_AotAnywhereLibcShimSource>
     <_AotAnywhereLibcShim>$(_AotAnywhereAppleBin)/libc.dll</_AotAnywhereLibcShim>
@@ -196,16 +220,28 @@
           Inputs="$(_AotAnywhereLauncherSource);$(_AotAnywhereLibcShimSource)"
           Outputs="$(_AotAnywhereLauncherExe);$(_AotAnywhereLibcShim)">
     <MakeDir Directories="$(_AotAnywhereAppleBin)" />
-    <Exec Command="&quot;$(_AotAnywhereZigExe)&quot; cc -O2 -s &quot;$(_AotAnywhereLauncherSource)&quot; -o &quot;$(_AotAnywhereLauncherExe)&quot;"
+    <!-- -mcpu=baseline: zig targets the build machine's CPU by default, and its LLVM (built with
+         assertions) has failed on some CI machines' CPUs. -->
+    <Exec Command="&quot;$(_AotAnywhereZigExe)&quot; cc -O2 -s -mcpu=baseline &quot;$(_AotAnywhereLauncherSource)&quot; -o &quot;$(_AotAnywhereLauncherExe)&quot;"
           StandardOutputImportance="Low" />
-    <Exec Command="&quot;$(_AotAnywhereZigExe)&quot; cc -O2 -s -shared &quot;$(_AotAnywhereLibcShimSource)&quot; -lole32 -o &quot;$(_AotAnywhereLibcShim)&quot;"
+    <Exec Command="&quot;$(_AotAnywhereZigExe)&quot; cc -O2 -s -mcpu=baseline -shared &quot;$(_AotAnywhereLibcShimSource)&quot; -lole32 -o &quot;$(_AotAnywhereLibcShim)&quot;"
+          StandardOutputImportance="Low" />
+  </Target>
+
+  <Target Name="_AotAnywhereAppleLinuxShim"
+          Condition="'$(_AotAnywhereAppleActive)' == 'true' and $([MSBuild]::IsOSPlatform('Linux'))"
+          DependsOnTargets="SetPathToZig"
+          Inputs="$(_AotAnywhereDarwinShimSource)"
+          Outputs="$(_AotAnywhereDarwinShim)">
+    <MakeDir Directories="$(_AotAnywhereAppleBin)" />
+    <Exec Command="&quot;$(_AotAnywhereZigExe)&quot; cc -O2 -s -mcpu=baseline -shared -fPIC &quot;$(_AotAnywhereDarwinShimSource)&quot; -o &quot;$(_AotAnywhereDarwinShim)&quot;"
           StandardOutputImportance="Low" />
   </Target>
 
   <Target Name="AotAnywhereAppleSetup"
           Condition="'$(_AotAnywhereAppleActive)' == 'true'"
           BeforeTargets="PrepareForBuild;_DetectSdkLocations;SetupOSSpecificProps"
-          DependsOnTargets="SetPathToZig;_AotAnywhereAppleWindowsLauncher">
+          DependsOnTargets="SetPathToZig;_AotAnywhereAppleWindowsLauncher;_AotAnywhereAppleLinuxShim">
 
     <Error Condition="!Exists('$(AotAnywhereAppleToolsDir)AotAnywhere.AppleTools.dll')"
            Text="AotAnywhere: AotAnywhere.AppleTools.dll was not found in '$(AotAnywhereAppleToolsDir)'. For a source build, run `dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release` first." />
@@ -216,6 +252,17 @@
     <Exec Condition="'$(_AotAnywhereSyntheticXcode)' == 'true'"
           Command="&quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; synthetic-xcode --out &quot;$(AotAnywhereXcodeDir)&quot; --xcode-version $(_AotAnywhereXcodeVersion) --sdk-version $(_AotAnywhereSyntheticSdkVersion)"
           StandardOutputImportance="Low" />
+    <!-- Workloads before 26.5 launch actool and ibtool as /usr/bin/xcrun, ignoring PATH. On a Mac
+         that xcrun hands over to the selected Xcode's own (written below); elsewhere it doesn't exist. -->
+    <PropertyGroup>
+      <_AotAnywhereOldWorkloadAssets Condition="!$([MSBuild]::IsOSPlatform('OSX')) and '$(_PackageVersion)' != '' and $([MSBuild]::VersionLessThan('$(_PackageVersion)', '26.5')) and ('@(ImageAsset)' != '' or '@(InterfaceDefinition)' != '')">true</_AotAnywhereOldWorkloadAssets>
+      <!-- A versioned TFM (net10.0-ios26.0) picks that SDK pack even from a newer workload. -->
+      <_AotAnywherePinnedTfm Condition="$(TargetFramework.Contains('-ios$(TargetPlatformVersion)'))">true</_AotAnywherePinnedTfm>
+    </PropertyGroup>
+    <Error Condition="'$(_AotAnywhereOldWorkloadAssets)' == 'true' and '$(_AotAnywherePinnedTfm)' == 'true'"
+           Text="AotAnywhere: TargetFramework '$(TargetFramework)' selects iOS SDK $(_PackageVersion), which compiles asset catalogs and storyboards through /usr/bin/xcrun, a Mac-only tool. Off a Mac, use TargetFramework '$(TargetFramework.Replace('-ios$(TargetPlatformVersion)', '-ios'))' (or iOS 26.5 or later); the iOS versions the app runs on are set by SupportedOSPlatformVersion, not by the TargetFramework." />
+    <Error Condition="'$(_AotAnywhereOldWorkloadAssets)' == 'true' and '$(_AotAnywherePinnedTfm)' != 'true'"
+           Text="AotAnywhere: iOS workload $(_PackageVersion) compiles asset catalogs and storyboards through /usr/bin/xcrun, a Mac-only tool. Off a Mac, use iOS workload 26.5 or later: `dotnet workload update` (on Linux, eng/install-ios-packs.sh). The iOS versions the app runs on are set by SupportedOSPlatformVersion, not by the workload version." />
     <Error Condition="!Exists('$(AotAnywhereXcodeDir)/Contents/version.plist')"
            Text="AotAnywhere: no Xcode found at '$(AotAnywhereXcodeDir)'. Set AotAnywhereXcodeDir to an Xcode folder, or leave it unset to build without one." />
     <Error Condition="'$(PublishAot)' != 'true' or '$(_IsPublishing)' != 'true'"
@@ -241,6 +288,19 @@
     <Exec Condition="!$([MSBuild]::IsOSPlatform('Windows'))"
           Command="chmod +x @(_AotAnywhereAppleTool->'&quot;$(_AotAnywhereAppleBin)/%(Identity)&quot;', ' ')"
           StandardOutputImportance="Low" />
+    <!-- Macs: /usr/bin/xcrun (which workloads before 26.5 launch by path) hands over to
+         $DEVELOPER_DIR/usr/bin/xcrun, so the stand-in Xcode gets ours. -->
+    <PropertyGroup>
+      <_AotAnywhereDeveloperXcrun>$(AotAnywhereXcodeDir)/Contents/Developer/usr/bin/xcrun</_AotAnywhereDeveloperXcrun>
+    </PropertyGroup>
+    <WriteLinesToFile Condition="'$(_AotAnywhereSyntheticXcode)' == 'true' and !$([MSBuild]::IsOSPlatform('Windows'))"
+                      File="$(_AotAnywhereDeveloperXcrun)"
+                      Lines="#!/bin/sh;exec &quot;$(_AotAnywhereDotnetHost)&quot; &quot;$(_AotAnywhereAppleDll)&quot; xcrun &quot;$@&quot;"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true" />
+    <Exec Condition="'$(_AotAnywhereSyntheticXcode)' == 'true' and !$([MSBuild]::IsOSPlatform('Windows'))"
+          Command="chmod +x &quot;$(_AotAnywhereDeveloperXcrun)&quot;"
+          StandardOutputImportance="Low" />
     <Copy Condition="$([MSBuild]::IsOSPlatform('Windows'))"
           SourceFiles="$(_AotAnywhereLauncherExe)"
           DestinationFiles="$(_AotAnywhereAppleBin)/%(_AotAnywhereAppleTool.Identity).exe"
@@ -258,11 +318,20 @@
            ILCompiler targets' own xcrun SDK-path probe doesn't; set it
            process-wide, the way xcode-select would. -->
       <_AotAnywhereAppleEnv Include="DEVELOPER_DIR" Value="$(AotAnywhereXcodeDir)/Contents/Developer" />
+      <!-- Workloads before 27.0 don't pass XcodeLocation to DetectSdkLocations; they read this. -->
+      <_AotAnywhereAppleEnv Include="MD_APPLE_SDK_ROOT" Value="$(AotAnywhereXcodeDir)" />
       <!-- AotAnywhereAppleLinkStubs=true: link against the package's own .tbd stubs
            (build/sysroot, from eng/generate-apple-ios-sysroot.cs) instead of the SDK's. -->
       <_AotAnywhereAppleEnv Include="AOTANYWHERE_APPLE_SYSROOT" Value="$(MSBuildThisFileDirectory)sysroot" Condition="'$(AotAnywhereAppleLinkStubs)' == 'true'" />
     </ItemGroup>
-    <AotAnywhereSetEnvironment Variables="@(_AotAnywhereAppleEnv)" PrependToPath="$(_AotAnywhereAppleBin)" />
+    <PropertyGroup>
+      <!-- The workload's P/Invokes into macOS's C library: the Linux stand-in, or on Windows libc.dll. -->
+      <_AotAnywhereDarwinShimInUse Condition="$([MSBuild]::IsOSPlatform('Linux'))">$(_AotAnywhereDarwinShim)</_AotAnywhereDarwinShimInUse>
+      <_AotAnywhereDarwinShimInUse Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(_AotAnywhereLibcShim)</_AotAnywhereDarwinShimInUse>
+    </PropertyGroup>
+    <AotAnywhereSetEnvironment Variables="@(_AotAnywhereAppleEnv)" PrependToPath="$(_AotAnywhereAppleBin)"
+                               DarwinShim="$(_AotAnywhereDarwinShimInUse)"
+                               ToolsAssembly="$([System.IO.Path]::GetFullPath('$(_AotAnywhereAppleDll)'))" />
 
   </Target>
 

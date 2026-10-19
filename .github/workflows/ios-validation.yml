@@ -125,6 +125,11 @@ jobs:
         workload: [ '26.0.11017', '26.5.10318', '27.0.10722' ]
         zig: [ '0.17.0' ]
         experimental: [ false ]
+        # Workloads before 26.5 compile storyboards and asset catalogs through /usr/bin/xcrun,
+        # so off a Mac they can't build IBTest (the package stops with an error saying so).
+        exclude:
+          - { host: linux, workload: '26.0.11017' }
+          - { host: windows, workload: '26.0.11017' }
         include:
           - { host: linux, runner: "${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-linux-musl }
           - { host: windows, runner: "${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}", target: x86_64-windows-gnu }
@@ -144,6 +149,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: actions/setup-dotnet@v6
+        env:
+          # Linux: a .NET install the iOS packs can be written into (the default is root's).
+          DOTNET_INSTALL_DIR: ${{ matrix.host == 'linux' && format('{0}/dotnet', runner.temp) || '' }}
         with:
           dotnet-version: |
             8.0.x
@@ -167,7 +175,11 @@ jobs:
         run: |
           set -eu
           zig version
-          if [ "${{ matrix.workload }}" = latest ]; then
+          if [ "${{ matrix.host }}" = linux ]; then
+            # `dotnet workload install ios` refuses Linux (the workload extends Mono's iOS AOT
+            # compilers, which only exist for macOS and Windows); Native AOT doesn't need them.
+            eng/install-ios-packs.sh "${{ matrix.workload }}"
+          elif [ "${{ matrix.workload }}" = latest ]; then
             dotnet workload install ios
           else
             # A rollback file pins the iOS manifest; the 10.0.100 band serves every 10.0 SDK.
@@ -175,7 +187,7 @@ jobs:
             echo '{ "microsoft.net.sdk.ios": "${{ matrix.workload }}/10.0.100" }' > "$RUNNER_TEMP/rollback.json"
             dotnet workload install ios --from-rollback-file "$RUNNER_TEMP/rollback.json"
           fi
-          dotnet workload list
+          dotnet workload list || true
 
       - name: Build the Apple tools
         run: dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release
@@ -247,12 +259,14 @@ jobs:
 
       - name: Check and run every build's apps
         run: |
-          set -u
+          # Not -e: each build's failures are recorded and reported, and the loop checks the next.
+          set +e -u
           fail=0
           rows=()
           # Every required build must be here; experimental ones may be missing.
           for host in linux windows macos; do
             for workload in 26.0.11017 26.5.10318 27.0.10722; do
+              [ "$workload" = 26.0.11017 ] && [ "$host" != macos ] && continue  # excluded in the build matrix
               if [ ! -d "apps/ios-$host-$workload-zig-0.17.0" ]; then
                 echo "FAIL $host / iOS $workload: no build"; rows+=("| $host | $workload | 0.17.0 | **no build** |"); fail=1
               fi
@@ -282,7 +296,8 @@ jobs:
             mkdir -p "$dir/device" && ditto -x -k "$ipa" "$dir/device"
             dev="$dir/device/Payload/IBTest.app"
             [ -f "$dev/embedded.mobileprovision" ] || { echo "FAIL .ipa has no embedded.mobileprovision"; bad=1; }
-            verify=$(codesign --verify --deep --strict -vv "$dev" 2>&1)
+            # (Exit status 3 for the unmet designated requirement; the output is what's checked.)
+            verify=$(codesign --verify --deep --strict -vv "$dev" 2>&1) || true
             echo "$verify"
             echo "$verify" | grep -q 'valid on disk' || { echo "FAIL device signature"; bad=1; }
             codesign -dvv "$dev" 2>&1 | grep -q 'Authority=Apple Development: AotAnywhere CI' || { echo "FAIL device signer"; bad=1; }

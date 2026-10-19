@@ -61,16 +61,9 @@ public class ZipToolTests
         File.WriteAllText(Path.Combine(dir, "Payload", "App.app", "Info.plist"), "x");
         string ipa = Path.Combine(dir, "out", "App.ipa");
 
-        var cwd = Environment.CurrentDirectory;
-        try
-        {
-            Environment.CurrentDirectory = dir;
-            ZipTool.Run(["-r", "-y", ipa, "Payload"]);
-        }
-        finally
-        {
-            Environment.CurrentDirectory = cwd;
-        }
+        // Relative to dir, as the workload runs it from the app's folder (not by changing this
+        // process's current directory: other tests' in-process MSBuild builds change it too).
+        ZipTool.Run(["-r", "-y", ipa, "Payload"], dir);
 
         using var read = ZipFile.OpenRead(ipa);
         await Assert.That(read.Entries.Select(e => e.FullName)).IsEquivalentTo(new[] { "Payload/", "Payload/App.app/", "Payload/App.app/App", "Payload/App.app/Info.plist" });

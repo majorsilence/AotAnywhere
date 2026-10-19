@@ -42,6 +42,43 @@ Native AOT is required: the Mono runtime's iOS AOT compiler only exists for
 macOS hosts. Simulator RIDs can't be `dotnet publish`ed, hence the
 `build -p:_IsPublishing=true` form.
 
+### Installing the iOS workload
+
+On macOS and Windows: `dotnet workload install ios`. On Linux that command refuses
+to run, because the workload pulls in Mono's iOS AOT compilers, which only exist
+for macOS and Windows. Native AOT doesn't use them, so install the rest of the
+workload with the repository's script instead (into a .NET install you can write
+to):
+
+```sh
+eng/install-ios-packs.sh            # the newest iOS workload
+eng/install-ios-packs.sh 26.5.10318 # or a given version
+```
+
+It pins the iOS workload manifest and unpacks its SDK, reference and runtime packs
+(and the Mono build tooling the SDK imports) from nuget.org. No workload is
+recorded as installed, so a later `dotnet workload` command may remove the packs
+as unused; run the script again afterwards.
+
+Off a Mac, projects with storyboards or asset catalogs need iOS SDK 26.5 or later:
+26.0 runs `actool` and `ibtool` through `/usr/bin/xcrun`, which only exists on
+macOS, and the build stops with an error saying so. Update the workload
+(`dotnet workload update`, or the script above), and use an unversioned
+TargetFramework (`net10.0-ios`): a versioned one such as `net10.0-ios26.0` picks
+the 26.0 SDK even from a newer workload. Neither limits which iOS versions the app
+runs on; that is `SupportedOSPlatformVersion`.
+
+### On Linux
+
+The workload's build tasks and trimmer steps call into macOS's C library
+(`/usr/lib/libc.dylib`, `/usr/lib/libSystem.dylib`) for things like `stat`,
+`realpath` and `copyfile`, assuming any non-Windows host is a Mac. The package
+compiles a small stand-in with zig on first use (`tools/launcher/darwin-shim.c`,
+giving macOS's `struct stat` layout and a `copyfile`), and points those library
+loads at it: in the build process directly, and in the processes the build starts
+through a .NET startup hook (`DOTNET_STARTUP_HOOKS`). On Windows the same
+redirect points them at the `libc.dll` shim below.
+
 ### On Windows
 
 The workload's Windows layer normally sends the build to a paired Mac. The package
