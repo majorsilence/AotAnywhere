@@ -29,7 +29,7 @@
       <Pack>true</Pack>
       <PackagePath>build</PackagePath>
     </None>
-    <!-- Windows: the tool-wrapper launcher and libc shim, compiled with zig on first use. -->
+    <!-- The Windows tool-wrapper launcher and libc shim, and the Linux macOS-C-library stand-in, compiled with zig on first use. -->
     <None Include="tools/launcher/*.c">
       <Pack>true</Pack>
       <PackagePath>build/tools/launcher</PackagePath>
