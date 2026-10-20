@@ -1,0 +1,71 @@
+name: Unified packages
+
+# Packs StuDev.AotAnywhere and StuDev.AotAnywhere.Apple from the unified branch (master plus every
+# feature branch, see unify-branches.sh) and uploads them as build artifacts. Nothing is published.
+#
+# Version: the next patch after upstream's newest release tag, as a pre-release numbered by this
+# workflow's run (upstream v1.1.0 -> 1.1.1-unified.<run>), so the packages sort after the release
+# they build on and each run's are distinct. Both packages share it: StuDev.AotAnywhere.Apple's
+# Sdk.props pulls in StuDev.AotAnywhere at its own version.
+#
+# This file lives only on the unified branch.
+
+on:
+  push:
+    branches: [ unified ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Version
+        id: ver
+        run: |
+          set -euo pipefail
+          latest=$(git ls-remote --tags --refs https://github.com/StuDevLabs/AotAnywhere.git 'v*' \
+            | sed -E 's#.*refs/tags/v##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+          latest=${latest:-0.0.0}
+          IFS=. read -r major minor patch <<< "$latest"
+          version="$major.$minor.$((patch + 1))-unified.${{ github.run_number }}"
+          echo "upstream release $latest -> $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        run: |
+          set -euo pipefail
+          out="$PWD/artifacts"
+          dotnet build -t:Pack src/AotAnywhere.nuproj -p:Version="${{ steps.ver.outputs.version }}" -p:PackageOutputPath="$out"
+          dotnet build -t:Pack src/Apple/StuDev.AotAnywhere.Apple.nuproj -p:Version="${{ steps.ver.outputs.version }}" -p:PackageOutputPath="$out"
+          ls -l "$out"
+          [ "$(ls "$out"/*.nupkg | wc -l)" = 2 ] || { echo "::error::expected two packages"; exit 1; }
+          {
+            echo "### Packages ${{ steps.ver.outputs.version }}"
+            echo
+            echo "From \`${GITHUB_SHA::7}\` on unified. Download the **packages** artifact, then add its folder as a NuGet source:"
+            echo
+            echo '```sh'
+            echo 'dotnet nuget add source /path/to/packages --name aotanywhere-unified'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: artifacts/*.nupkg
+          if-no-files-found: error
