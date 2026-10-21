@@ -169,16 +169,14 @@ elsewhere.
 `.github/workflows/ios-validation.yml` builds `test/ios/IBTest` (storyboards
 whose controllers drive their own outlets, actions, segues, cells and gesture
 recognizers, and an asset catalog it checks at run time) on Linux, Windows and
-macOS, with iOS workloads 26.0, 26.5 and 27.0, and runs every build on a Mac's
-simulator. The workflow builds zig 0.17.0 with `eng/zig-patches`
-(`eng/build-patched-zig.sh`) for each host to link with; a second job does the
-same with zig's latest development build, as an early warning that doesn't fail
-the run, as does a build with the newest iOS workload available.
+macOS, with iOS workloads 26.5 and 27.0 (and 26.0 on macOS), and runs every
+build on a Mac's simulator. Each host builds once with the stock zig the
+packages bring from NuGet, as consumers do, and the rest with zig 0.17.0 built
+with the patches in `eng/zig-patches` (see its README; iOS builds don't need
+them). Builds with zig's latest development version and with the newest iOS
+workload available are early warnings that don't fail the run.
 
-`eng/build-patched-zig.sh` takes the zig version in `ZIG_VERSION` (a release,
-`master`, or a development version). The patches in `eng/zig-patches` apply to
-both; a version they stop applying to gets its own set in
-`eng/zig-patches/<version>/` or `eng/zig-patches/<major.minor>/`. Locally: build the tools
+Locally: build the tools
 (`dotnet build src/Apple/tools/AotAnywhere.AppleTools -c Release`), build the app
 for the simulator, and run `test/ios/run-sim.py <simulator UDID> <IBTest.app>`.
 

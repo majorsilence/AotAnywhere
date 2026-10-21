@@ -7,7 +7,9 @@ name: iOS Validation
 #   build    - on Linux, Windows and macOS, for each supported iOS workload version (pinned with a
 #              rollback file): the Apple tools, then test/ios/IBTest (storyboards, asset catalog)
 #              for the simulator and as a device app signed with a throwaway identity, linked by
-#              that host's patched zig. The MSBuild tests run once per host.
+#              that host's patched zig; and once per host with the stock zig the packages bring
+#              from NuGet (Vezel.Zig.Toolsets, zig: nuget), as consumers build. The MSBuild tests
+#              run once per host.
 #   validate - on a Mac: Apple's codesign checks every build's apps, each simulator build runs its
 #              self-tests in a simulator, and the signed .ipa files are inspected.
 # Experimental entries (zig master, the newest unpinned workload) are reported but don't fail the
@@ -134,6 +136,10 @@ jobs:
           - { host: linux, runner: "${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-linux-musl }
           - { host: windows, runner: "${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}", target: x86_64-windows-gnu }
           - { host: macos, runner: "${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}", target: aarch64-macos-none }
+          # The stock zig from NuGet that consumers get (the patches only matter for an opt-in).
+          - { host: linux, runner: "${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-linux-musl, workload: '27.0.10722', zig: nuget, experimental: false }
+          - { host: windows, runner: "${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}", target: x86_64-windows-gnu, workload: '27.0.10722', zig: nuget, experimental: false }
+          - { host: macos, runner: "${{ vars.IOS_MACOS_RUNNER || 'macos-latest' }}", target: aarch64-macos-none, workload: '27.0.10722', zig: nuget, experimental: false }
           # Early warnings: zig master, and whatever iOS workload is newest.
           - { host: linux, runner: "${{ vars.IOS_LINUX_RUNNER || 'ubuntu-latest' }}", target: x86_64-linux-musl, workload: '27.0.10722', zig: master, experimental: true }
           - { host: windows, runner: "${{ vars.IOS_WINDOWS_RUNNER || 'windows-latest' }}", target: x86_64-windows-gnu, workload: '27.0.10722', zig: master, experimental: true }
@@ -158,11 +164,13 @@ jobs:
             10.0.x
 
       - uses: actions/download-artifact@v8
+        if: matrix.zig != 'nuget'
         with:
           name: zig-patched-${{ matrix.zig }}
           path: zig
 
       - name: Put the patched zig on PATH
+        if: matrix.zig != 'nuget'
         run: |
           set -eu
           cd zig
@@ -174,7 +182,7 @@ jobs:
       - name: Install the iOS workload ${{ matrix.workload }}
         run: |
           set -eu
-          zig version
+          [ "${{ matrix.zig }}" = nuget ] || zig version
           if [ "${{ matrix.host }}" = linux ]; then
             # `dotnet workload install ios` refuses Linux (the workload extends Mono's iOS AOT
             # compilers, which only exist for macOS and Windows); Native AOT doesn't need them.
@@ -199,17 +207,17 @@ jobs:
       - name: Throwaway signing identity
         run: test/ios/make-test-signing.sh "$RUNNER_TEMP/signing"
 
-      # UseExternalZig: link with the patched zig on PATH, not the NuGet toolset.
+      # UseExternalZig: link with the patched zig on PATH, not the NuGet toolset (zig: nuget uses that).
       # AotAnywhereAppleForce: use the package's tools even on a Mac with Xcode.
       - name: Simulator build
         run: |
           dotnet build test/ios/IBTest -c Release -r iossimulator-arm64 -p:_IsPublishing=true \
-            -p:UseExternalZig=true -p:AotAnywhereAppleForce=true
+            -p:UseExternalZig=${{ matrix.zig != 'nuget' }} -p:AotAnywhereAppleForce=true
 
       - name: Signed device build
         run: |
           s="$RUNNER_TEMP/signing"
-          dotnet publish test/ios/IBTest -c Release -r ios-arm64 -p:UseExternalZig=true -p:AotAnywhereAppleForce=true \
+          dotnet publish test/ios/IBTest -c Release -r ios-arm64 -p:UseExternalZig=${{ matrix.zig != 'nuget' }} -p:AotAnywhereAppleForce=true \
             -p:AotAnywhereSignP12File="$s/dev.p12" -p:AotAnywhereSignP12PasswordFile="$s/dev.p12.password" \
             -p:AotAnywhereProvisioningProfile="$s/test.mobileprovision"
 
@@ -271,6 +279,9 @@ jobs:
                 echo "FAIL $host / iOS $workload: no build"; rows+=("| $host | $workload | 0.17.0 | **no build** |"); fail=1
               fi
             done
+            if [ ! -d "apps/ios-$host-27.0.10722-zig-nuget" ]; then
+              echo "FAIL $host / iOS 27.0.10722 / NuGet zig: no build"; rows+=("| $host | 27.0.10722 | nuget | **no build** |"); fail=1
+            fi
           done
           for dir in apps/ios-*; do
             name=${dir#apps/ios-}
