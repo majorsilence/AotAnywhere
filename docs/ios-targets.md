@@ -124,11 +124,15 @@ elsewhere.
   - views: view, image view, label, button (Default style, per-state titles,
     colours and images, or a Plain/Gray/Tinted/Filled button configuration),
     text field, text view, switch, slider, segmented control, activity
-    indicator, scroll view and stack view;
+    indicator, scroll view, stack view, picker view, date picker, map view and
+    web view (`WKWebView`, with its configuration);
   - table views (prototype cells in the four standard styles, with accessory
     and selection styles, or static cells in sections with header and footer
-    titles) and collection views with a flow layout and prototype cells;
-  - tap gesture recognizers, with their actions;
+    titles; table header and footer views) and collection views (a flow layout
+    or a layout of your own class, prototype cells, section header and footer
+    views, a background view);
+  - tap, pan, swipe, pinch, rotation, long press and screen edge gesture
+    recognizers, with their settings and actions;
   - Dynamic Type text styles, and named colours from the app's asset catalog;
   - Auto Layout constraints, including the safe area layout guide;
   - outlets and actions (target/action with the control event) on view
@@ -140,12 +144,16 @@ elsewhere.
     button items, cell selection or `PerformSegue`; storyboard references, and
     several storyboards in one app.
 
-  Not supported: other gesture recognizers (pan, swipe, ...), custom collection
-  view layouts and self-sizing collection cells, table header, footer and
-  background views, collection view section headers and footers, and other
-  views (picker, date picker, map, web view, ...). Any of these stops the build
-  with an error naming it; set `AOTANYWHERE_IBTOOL_TRACE=1` to see where in the
-  compiler it was found.
+  As with Xcode, an app whose storyboards use a map or web view must link
+  MapKit or WebKit: it does when its code uses a type from them (an outlet
+  typed `MKMapView` or `WKWebView` is enough). A table's background view is
+  dropped and a flow layout subclass keeps only its class, as Interface Builder
+  does.
+
+  Not supported: hover gesture recognizers, self-sizing collection cells,
+  compositional collection view layouts, and other views (scene, AR and Metal
+  views, ...). Any of these stops the build with an error naming it; set
+  `AOTANYWHERE_IBTOOL_TRACE=1` to see where in the compiler it was found.
 - **Asset catalogs:** app icons (including Xcode 14's single 1024px icon, scaled
   to each size); image sets from PNG, PDF or SVG files (vectors are rendered to
   1x, 2x and 3x bitmaps, and kept when "Preserve Vector Data" is set); sRGB

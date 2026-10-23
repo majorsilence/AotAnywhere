@@ -328,3 +328,152 @@ public class GridController : UICollectionViewController {
 	public override UICollectionViewCell GetCell (UICollectionView collectionView, NSIndexPath indexPath)
 		=> (UICollectionViewCell) collectionView.DequeueReusableCell ("Tile", indexPath);
 }
+
+// More.storyboard: picker, date picker, map and web views; pan, swipe, pinch, rotation, long press,
+// screen edge and double tap recognizers; table header and footer views; collection view section
+// headers and footers; and a custom collection view layout.
+[Register ("MoreViewController")]
+public class MoreViewController : UIViewController, IUIPickerViewDataSource, IUIPickerViewDelegate {
+	public MoreViewController (IntPtr handle) : base (handle) { }
+	[Outlet] public UIPickerView? picker { get; set; }
+	[Outlet] public UIDatePicker? datePicker { get; set; }
+	[Outlet] public MapKit.MKMapView? map { get; set; }
+	[Outlet] public WebKit.WKWebView? web { get; set; }
+	[Outlet] public UIView? gestureView { get; set; }
+	readonly List<string> problems = new ();
+	bool ran;
+	void Check (bool ok, string what) { if (!ok) problems.Add (what); }
+
+	[Export ("numberOfComponentsInPickerView:")]
+	public nint GetComponentCount (UIPickerView pickerView) => 2;
+	[Export ("pickerView:numberOfRowsInComponent:")]
+	public nint GetRowsInComponent (UIPickerView pickerView, nint component) => component == 0 ? 3 : 5;
+	[Export ("pickerView:titleForRow:forComponent:")]
+	public string GetTitle (UIPickerView pickerView, nint row, nint component) => $"{component}:{row}";
+
+	[Action ("dateChanged:")] public void DateChanged (UIDatePicker sender) { }
+	[Action ("panned:")] public void Panned (UIPanGestureRecognizer r) { }
+	[Action ("swiped:")] public void Swiped (UISwipeGestureRecognizer r) { }
+	[Action ("pinched:")] public void Pinched (UIPinchGestureRecognizer r) { }
+	[Action ("rotated:")] public void Rotated (UIRotationGestureRecognizer r) { }
+	[Action ("longPressed:")] public void LongPressed (UILongPressGestureRecognizer r) { }
+	[Action ("doubleTapped:")] public void DoubleTapped (UITapGestureRecognizer r) { }
+	[Action ("edgePanned:")] public void EdgePanned (UIScreenEdgePanGestureRecognizer r) { }
+
+	public override void ViewDidAppear (bool animated)
+	{
+		base.ViewDidAppear (animated);
+		if (ran)
+			return;
+		ran = true;
+		var nav = NavigationController!;
+		Log.Line ($"picker components={picker?.NumberOfComponents} rows={picker?.RowsInComponent (1)} frame={picker?.Frame}");
+		Check (picker?.NumberOfComponents == 2 && picker.RowsInComponent (1) == 5, "picker data source");
+		Log.Line ($"date picker mode={datePicker?.Mode} style={datePicker?.PreferredDatePickerStyle} interval={datePicker?.MinuteInterval}");
+		Check (datePicker?.Mode == UIDatePickerMode.Date && datePicker.PreferredDatePickerStyle == UIDatePickerStyle.Compact, "date picker");
+		Log.Line ($"map type={map?.MapType} zoom={map?.ZoomEnabled} compass={map?.ShowsCompass} frame={map?.Frame}");
+		Check (map is not null && map.MapType == MapKit.MKMapType.Standard && map.ZoomEnabled && map.ShowsCompass, "map view");
+		Log.Line ($"web view={web is not null} detectors={web?.Configuration.DataDetectorTypes} inline={web?.Configuration.AllowsInlineMediaPlayback}");
+		// Interface Builder's default: every kind of data detector (the seven bits, not the All mask).
+		Check (web is not null && (ulong) web.Configuration.DataDetectorTypes == 127, "web view configuration");
+
+		var recognizers = gestureView?.GestureRecognizers ?? [];
+		var pan = recognizers.OfType<UIPanGestureRecognizer> ().FirstOrDefault (r => r is not UIScreenEdgePanGestureRecognizer);
+		var swipe = recognizers.OfType<UISwipeGestureRecognizer> ().FirstOrDefault ();
+		var press = recognizers.OfType<UILongPressGestureRecognizer> ().FirstOrDefault ();
+		var tap = recognizers.OfType<UITapGestureRecognizer> ().FirstOrDefault ();
+		var edge = View!.GestureRecognizers?.OfType<UIScreenEdgePanGestureRecognizer> ().FirstOrDefault ();
+		Log.Line ($"recognizers={string.Join (",", recognizers.Select (r => r.GetType ().Name))} pan max={pan?.MaximumNumberOfTouches} swipe={swipe?.Direction}/{swipe?.NumberOfTouchesRequired} press={press?.MinimumPressDuration}/{press?.AllowableMovement} taps={tap?.NumberOfTapsRequired}/{tap?.NumberOfTouchesRequired} edges={edge?.Edges}");
+		Check (recognizers.Length == 6 && recognizers.Any (r => r is UIPinchGestureRecognizer) && recognizers.Any (r => r is UIRotationGestureRecognizer), "recognizers attached");
+		Check (pan?.MaximumNumberOfTouches == 2 && pan.MinimumNumberOfTouches == 1, "pan touches");
+		Check (swipe?.Direction == UISwipeGestureRecognizerDirection.Left && swipe.NumberOfTouchesRequired == 2, "swipe direction and touches");
+		Check (press is not null && Math.Abs (press.MinimumPressDuration - 0.75) < 0.001 && Math.Abs (press.AllowableMovement - 12) < 0.001, "long press settings");
+		Check (tap?.NumberOfTapsRequired == 2 && tap.NumberOfTouchesRequired == 2, "double tap");
+		Check (edge?.Edges == UIRectEdge.Left, "screen edge");
+
+		bool scripted = false;
+		web?.LoadHtmlString ("<html><body><p id='p'>hello</p></body></html>", null);
+		Log.After (2.0, () => {
+			web?.EvaluateJavaScript ("document.getElementById('p').textContent + (40 + 2)", (result, error) => {
+				Log.Line ($"web script result={result} error={error?.LocalizedDescription}");
+				scripted = result?.ToString () == "hello42";
+			});
+			Log.After (1.0, () => {
+				Check (scripted, "web view loads and runs script");
+				PerformSegue ("table", this);
+				Log.After (1.5, () => {
+					var table = (HeaderTableController) nav.TopViewController!;
+					var header = table.TableView.TableHeaderView;
+					var footer = table.TableView.TableFooterView;
+					Log.Line ($"table header={header?.Frame} label={Log.Find<UILabel> (header ?? new UIView ())?.Text} footer={footer?.Frame} rows={table.TableView.VisibleCells.Length}");
+					Check (Log.Find<UILabel> (header ?? new UIView ())?.Text == "Header" && footer is not null && footer.Frame.Height == 40, "table header and footer views");
+					Check (table.TableView.VisibleCells.Length == 3, "table rows below the header");
+					nav.PopViewController (false);
+					PerformSegue ("flow", this);
+					Log.After (1.5, () => {
+						var flow = (SectionsController) nav.TopViewController!;
+						var headers = flow.CollectionView.GetVisibleSupplementaryViews (UICollectionElementKindSectionKey.Header);
+						var footers = flow.CollectionView.GetVisibleSupplementaryViews (UICollectionElementKindSectionKey.Footer);
+						Log.Line ($"flow headers={headers.Length} footers={footers.Length} header={headers.FirstOrDefault ()?.GetType ().Name}/{headers.FirstOrDefault ()?.Frame} cells={flow.CollectionView.VisibleCells.Length}");
+						Check (headers.Length == 2 && footers.Length == 2 && flow.CollectionView.VisibleCells.Length == 4, "collection view section headers and footers");
+						nav.PopViewController (false);
+						PerformSegue ("custom", this);
+						Log.After (1.5, () => {
+							var custom = (CustomLayoutController) nav.TopViewController!;
+							var layout = custom.CollectionView.CollectionViewLayout;
+							Log.Line ($"custom layout={layout.GetType ().Name} cells={custom.CollectionView.VisibleCells.Length} first={custom.CollectionView.VisibleCells.FirstOrDefault ()?.Frame}");
+							Check (layout is GridLayout && custom.CollectionView.VisibleCells.Length == 6, "custom collection view layout");
+							Log.Line (problems.Count == 0 ? "more ok" : "FAIL more: " + string.Join (", ", problems));
+						});
+					});
+				});
+			});
+		});
+	}
+}
+
+[Register ("HeaderTableController")]
+public class HeaderTableController : UITableViewController {
+	public HeaderTableController (IntPtr handle) : base (handle) { }
+	public override nint RowsInSection (UITableView tableView, nint section) => 3;
+	public override UITableViewCell GetCell (UITableView tableView, NSIndexPath indexPath) => tableView.DequeueReusableCell ("Row", indexPath);
+}
+
+[Register ("SectionsController")]
+public class SectionsController : UICollectionViewController {
+	public SectionsController (IntPtr handle) : base (handle) { }
+	public override nint NumberOfSections (UICollectionView collectionView) => 2;
+	public override nint GetItemsCount (UICollectionView collectionView, nint section) => 2;
+	public override UICollectionViewCell GetCell (UICollectionView collectionView, NSIndexPath indexPath)
+		=> (UICollectionViewCell) collectionView.DequeueReusableCell ("Item", indexPath);
+	public override UICollectionReusableView GetViewForSupplementaryElement (UICollectionView collectionView, NSString elementKind, NSIndexPath indexPath)
+		=> collectionView.DequeueReusableSupplementaryView (elementKind, elementKind == UICollectionElementKindSectionKey.Header ? "Header" : "Footer", indexPath);
+}
+
+[Register ("CustomLayoutController")]
+public class CustomLayoutController : UICollectionViewController {
+	public CustomLayoutController (IntPtr handle) : base (handle) { }
+	public override nint GetItemsCount (UICollectionView collectionView, nint section) => 6;
+	public override UICollectionViewCell GetCell (UICollectionView collectionView, NSIndexPath indexPath)
+		=> (UICollectionViewCell) collectionView.DequeueReusableCell ("Cell", indexPath);
+}
+
+// A custom layout: two columns of 60-point squares.
+[Register ("GridLayout")]
+public class GridLayout : UICollectionViewLayout {
+	public GridLayout (IntPtr handle) : base (handle) { }
+	public GridLayout () { }
+	[Export ("initWithCoder:")]
+	public GridLayout (NSCoder coder) : base (coder) { }
+	int Count => (int) (CollectionView?.NumberOfItemsInSection (0) ?? 0);
+	CGRect FrameAt (int i) => new CGRect (20 + (i % 2) * 80, 120 + (i / 2) * 80, 60, 60);
+	public override CGSize CollectionViewContentSize => new CGSize (CollectionView?.Bounds.Width ?? 0, 120 + (Count + 1) / 2 * 80);
+	public override UICollectionViewLayoutAttributes[] LayoutAttributesForElementsInRect (CGRect rect)
+		=> Enumerable.Range (0, Count).Select (i => LayoutAttributesForItem (NSIndexPath.FromItemSection (i, 0))!).Where (a => a.Frame.IntersectsWith (rect)).ToArray ();
+	public override UICollectionViewLayoutAttributes? LayoutAttributesForItem (NSIndexPath indexPath)
+	{
+		var a = UICollectionViewLayoutAttributes.CreateForCell<UICollectionViewLayoutAttributes> (indexPath);
+		a.Frame = FrameAt ((int) indexPath.Item);
+		return a;
+	}
+}

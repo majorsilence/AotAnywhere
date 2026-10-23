@@ -94,10 +94,10 @@ handles that itself, no LLVM install needed).
   expected to be built with Apple's Xcode, and building, signing and uploading
   apps for distribution is out of scope. Use a Mac with Xcode (or a hosted macOS
   build service) for anything you ship. Storyboards and XIBs (common views and
-  controls, table and collection views, constraints, outlets, actions and tap
-  gestures, navigation and tab bar controllers, segues and storyboard references)
-  and asset catalogs (app icons; PNG, PDF and SVG images; colours; data; dark-mode
-  variants) are compiled by built-in
+  controls, pickers, map and web views, table and collection views, constraints,
+  outlets, actions and gesture recognizers, navigation and tab bar controllers,
+  segues and storyboard references) and asset catalogs (app icons; PNG, PDF and
+  SVG images; colours; data; dark-mode variants) are compiled by built-in
   replacements for Apple's `ibtool` and `actool`; [iOS targets](docs/ios-targets.md)
   lists what is covered. A project
   that uses anything else those tools handle stops with an error naming the item.

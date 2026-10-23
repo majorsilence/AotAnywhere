@@ -31,7 +31,7 @@ def run(device, storyboard):
     return any(f"IBTEST {storyboard.lower()} ok" in l for l in log) and not any("IBTEST FAIL" in l for l in log)
 
 def main():
-    device, app, storyboards = sys.argv[1], sys.argv[2], sys.argv[3:] or ["Showcase", "Controls", "Tabbed", "Assets", "Gaps"]
+    device, app, storyboards = sys.argv[1], sys.argv[2], sys.argv[3:] or ["Showcase", "Controls", "Tabbed", "Assets", "Gaps", "More"]
     subprocess.run(["xcrun", "simctl", "install", device, app], check=True)
     failed = []
     for sb in storyboards:

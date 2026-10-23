@@ -138,7 +138,7 @@ public class InterfaceBuilderTests
     public async Task UnsupportedElementsAreErrors()
     {
         var dir = Temp();
-        var xib = Xib.Replace("<label ", "<pickerView ").Replace("</label>", "</pickerView>");
+        var xib = Xib.Replace("<label ", "<sceneKitView ").Replace("</label>", "</sceneKitView>");
         await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Bad.xib", xib), dir)).Throws<InterfaceBuilder.CompileError>();
     }
 
@@ -383,19 +383,81 @@ public class InterfaceBuilderTests
         // An unwind segue needs its action.
         await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Unwind.storyboard", Navigation.Replace("kind=\"show\"", "kind=\"unwind\"")), dir))
             .Throws<InterfaceBuilder.CompileError>();
-        var pan = Navigation.Replace("<placeholder placeholderIdentifier=\"IBFirstResponder\"", "<panGestureRecognizer minimumNumberOfTouches=\"1\" id=\"PAN\"/><placeholder placeholderIdentifier=\"IBFirstResponder\"");
-        await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Pan.storyboard", pan), dir))
+        var hover = Navigation.Replace("<placeholder placeholderIdentifier=\"IBFirstResponder\"", "<hoverGestureRecognizer id=\"HOV\"/><placeholder placeholderIdentifier=\"IBFirstResponder\"");
+        await Assert.That(() => InterfaceBuilder.Compile(Write(dir, "Hover.storyboard", hover), dir))
             .Throws<InterfaceBuilder.CompileError>();
     }
 
-    // test/ios/IBTest/Gaps.storyboard: checked at run time by the app, and against Apple's ibtool output.
-    static Dictionary<string, NibArchive> CompileGaps()
+    // test/ios/IBTest's Gaps and More storyboards: checked at run time by the app, and against Apple's ibtool output.
+    static Dictionary<string, NibArchive> CompileTestStoryboard(string name)
     {
         var dir = Temp();
-        var source = Path.Combine(Harness.RepoRoot, "test", "ios", "IBTest", "Gaps.storyboard");
-        InterfaceBuilder.Compile(Write(dir, "Gaps.storyboard", File.ReadAllText(source)), dir);
-        return Directory.GetFiles(Path.Combine(dir, "Gaps.storyboardc"), "*.nib")
+        var source = Path.Combine(Harness.RepoRoot, "test", "ios", "IBTest", name + ".storyboard");
+        InterfaceBuilder.Compile(Write(dir, name + ".storyboard", File.ReadAllText(source)), dir);
+        return Directory.GetFiles(Path.Combine(dir, name + ".storyboardc"), "*.nib")
             .ToDictionary(f => Path.GetFileNameWithoutExtension(f)!, f => NibArchive.Read(File.ReadAllBytes(f)));
+    }
+
+    static Dictionary<string, NibArchive> CompileGaps() => CompileTestStoryboard("Gaps");
+
+    [Test]
+    public async Task GestureRecognizersArchiveTheirSettings()
+    {
+        var nib = CompileTestStoryboard("More")["UINavigationController-NAV"];
+        NibArchive.Obj One(string className) => nib.Objects.Single(o => o.ClassName == className);
+        await Assert.That(One("UIPanGestureRecognizer")["UIPanGestureRecognizer.maximumNumberOfTouches"]).IsEqualTo(2);
+        await Assert.That(One("UISwipeGestureRecognizer")["UISwipeGestureRecognizer.direction"]).IsEqualTo(2); // left
+        await Assert.That(One("UISwipeGestureRecognizer")["UISwipeGestureRecognizer.numberOfTouchesRequired"]).IsEqualTo(2);
+        var press = One("UILongPressGestureRecognizer");
+        await Assert.That(press["UILongPressGestureRecognizer.minimumPressDuration"]).IsEqualTo(0.75f);
+        await Assert.That(((NibArchive.Obj)press["UILongPressGestureRecognizer._imp"]!)["UITapRecognizer.numberOfTapsRequired"]).IsEqualTo(0);
+        var edge = One("UIScreenEdgePanGestureRecognizer");
+        await Assert.That(edge["UIScreenEdgePanGestureRecognizer.edges"]).IsEqualTo(2); // left
+        await Assert.That(edge["UIGestureRecognizer.allowedTouchTypes"]).IsEqualTo(11);
+        var tap = (NibArchive.Obj)One("UITapGestureRecognizer")["UITapGestureRecognizer._imp"]!;
+        await Assert.That(tap["UITapRecognizer.numberOfTapsRequired"]).IsEqualTo(2);
+        await Assert.That(nib.Objects.Any(o => o.ClassName == "UIPinchGestureRecognizer")).IsTrue();
+        await Assert.That(nib.Objects.Any(o => o.ClassName == "UIRotationGestureRecognizer")).IsTrue();
+    }
+
+    [Test]
+    public async Task PickersMapsAndWebViewsCompile()
+    {
+        var view = CompileTestStoryboard("More")["FEAT-view-V"];
+        NibArchive.Obj One(string className) => view.Objects.Single(o => o.ClassName == className);
+        await Assert.That(One("UIPickerView")["UIAllowSelectingCells"]).IsEqualTo(true);
+        var date = One("UIDatePicker");
+        await Assert.That((date["UIPickerStyle"], date["UIDatePickerMode"], date["UIMinuteInterval"])).IsEqualTo(((object?)2, (object?)1, (object?)0));
+        var map = One("MKMapView");
+        await Assert.That(map["MKMapType"]).IsEqualTo(0);
+        await Assert.That(((NibArchive.Obj)map["MKPreferredConfiguration"]!).ClassName).IsEqualTo("MKStandardMapConfiguration");
+        var configuration = (NibArchive.Obj)One("WKWebView")["configuration"]!;
+        await Assert.That(configuration["dataDetectorTypes"]).IsEqualTo(127);
+        await Assert.That(((NibArchive.Obj)configuration["preferences"]!).ClassName).IsEqualTo("WKPreferences");
+    }
+
+    [Test]
+    public async Task HeaderFooterViewsAndCustomLayoutsCompile()
+    {
+        var nibs = CompileTestStoryboard("More");
+        var table = nibs["TBL-view-TV"].Objects.Single(o => o.ClassName == "UITableView");
+        await Assert.That(((NibArchive.Obj)table["UITableHeaderView"]!).ClassName).IsEqualTo("UIView");
+        var subviews = ((NibArchive.Obj)table["UISubviews"]!).Items.Select(i => i.Value).ToList();
+        await Assert.That(subviews).Contains(table["UITableHeaderView"]);
+        await Assert.That(subviews).Contains(table["UITableFooterView"]);
+
+        var flow = nibs["FLOW-view-FCV"].Objects.Single(o => o.ClassName == "UICollectionView");
+        var supplementary = (NibArchive.Obj)flow["UICollectionViewSupplementaryViewNibDict"]!;
+        var keys = supplementary.Items.Select(i => i.Value).OfType<NibArchive.Obj>().Where(o => o.ClassName == "NSString").Select(Str).ToList();
+        await Assert.That(keys).IsEquivalentTo(new[] { "UICollectionElementKindSectionFooter/Footer", "UICollectionElementKindSectionHeader/Header" });
+        var headerNib = NibArchive.Read((byte[])((NibArchive.Obj)supplementary.Items.Select(i => i.Value).OfType<NibArchive.Obj>()
+            .First(o => o.ClassName == "UINib")["archiveData"]!)["NS.bytes"]!);
+        await Assert.That(headerNib.Objects.Any(o => o.ClassName == "UICollectionReusableView")).IsTrue();
+
+        var custom = nibs["CUST-view-CCV"].Objects.Single(o => o.ClassName == "UICollectionView");
+        var layout = (NibArchive.Obj)custom["UICollectionLayout"]!;
+        await Assert.That((layout.ClassName, Str(layout["UIClassName"]), Str(layout["UIOriginalClassName"])))
+            .IsEqualTo(("UIClassSwapper", "GridLayout", "UICollectionViewLayout"));
     }
 
     [Test]

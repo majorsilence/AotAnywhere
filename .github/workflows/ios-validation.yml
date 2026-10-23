@@ -295,7 +295,7 @@ jobs:
             app="$dir/sim/IBTest.app"
             find "$app" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && chmod +x "$1"' _ {} \;
             codesign --verify --deep --strict "$app" || { echo "FAIL simulator signature"; bad=1; }
-            for f in Assets.car Showcase.storyboardc Controls.storyboardc Tabbed.storyboardc; do
+            for f in Assets.car Showcase.storyboardc Controls.storyboardc Tabbed.storyboardc Gaps.storyboardc Other.storyboardc More.storyboardc; do
               [ -e "$app/$f" ] || { echo "FAIL simulator app has no $f"; bad=1; }
             done
             python3 test/ios/run-sim.py "${{ steps.sim.outputs.udid }}" "$app" || bad=1

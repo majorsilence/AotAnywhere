@@ -614,9 +614,17 @@ public static class InterfaceBuilder
             "collectionView" => CollectionView(e),
             "collectionViewCell" => CollectionViewCell(e),
             "collectionViewCellContentView" => View(e, "UIView"),
-            "tapGestureRecognizer" => TapRecognizer(e),
-            var other when IsGestureRecognizer(e) => throw new CompileError($"'{other}' gesture recognizers are not supported (only tap)"),
-            var other => throw new CompileError($"'{other}' elements are not supported (supported: view, imageView, label, button, textField, textView, switch, slider, segmentedControl, activityIndicatorView, scrollView, stackView, tableView, collectionView, tapGestureRecognizer)"),
+            "collectionReusableView" => View(e, "UICollectionReusableView", o =>
+            {
+                if ((string?)e.Attribute("reuseIdentifier") is { } reuse)
+                    o.Add("UIReuseIdentifier", String(reuse));
+            }),
+            "pickerView" => View(e, "UIPickerView", o => o.Add("UIAllowSelectingCells", true)),
+            "datePicker" => DatePicker(e),
+            "mapView" => MapView(e),
+            "wkWebView" => WebView(e),
+            _ when IsGestureRecognizer(e) => GestureRecognizer(e),
+            var other => throw new CompileError($"'{other}' elements are not supported (supported: view, imageView, label, button, textField, textView, switch, slider, segmentedControl, activityIndicatorView, scrollView, stackView, tableView, collectionView, pickerView, datePicker, mapView, wkWebView, and tap, pan, swipe, pinch, rotation, long press and screen edge gesture recognizers)"),
         };
 
         public static bool IsGestureRecognizer(XElement e) => e.Name.LocalName.EndsWith("GestureRecognizer", StringComparison.Ordinal);
@@ -670,12 +678,12 @@ public static class InterfaceBuilder
             // with an intrinsic size); sliders and segmented controls always carry theirs.
             int defaultHugging = defaultClass is "UISwitch" or "UIActivityIndicatorView" ? 750 : 250;
             int hh = (int)Num(e, "horizontalHuggingPriority", 250), vh = (int)Num(e, "verticalHuggingPriority", 250);
-            if (hh != defaultHugging || vh != defaultHugging || defaultClass is "UISlider" or "UISegmentedControl")
+            if (hh != defaultHugging || vh != defaultHugging || defaultClass is "UISlider" or "UISegmentedControl" or "UIPickerView")
                 o.Add("UIViewContentHuggingPriority", String($"{{{hh}, {vh}}}"));
             int hc = (int)Num(e, "horizontalCompressionResistancePriority", 750), vc = (int)Num(e, "verticalCompressionResistancePriority", 750);
             if (hc != 750 || vc != 750)
                 o.Add("UIViewContentCompressionResistancePriority", String($"{{{hc}, {vc}}}"));
-            if (defaultClass == "UIStackView")
+            if (defaultClass is "UIStackView" or "MKMapView")
                 o.Add("UIViewLayoutMargins", Insets(0, 0, 0, 0));
             if (Bool(e, "preservesSuperviewLayoutMargins", false))
                 o.Add("UIViewPreservesSuperviewMargins", true).Add("UIViewPreservesSpecificSuperviewMargins", 15);
@@ -1163,18 +1171,29 @@ public static class InterfaceBuilder
 
         // --- tables, collections, gestures -------------------------------------------------
 
-        // Views a table or collection view hosts outside its cells, which aren't compiled.
-        static void RejectAccessoryViews(XElement e)
+        static XElement? Keyed(XElement e, string key) => e.Elements().FirstOrDefault(c => (string?)c.Attribute("key") == key);
+
+        // Views a table or collection view hosts outside its cells, which are subviews too.
+        static void AddAccessorySubviews(NibArchive.Obj o, IEnumerable<NibArchive.Obj> views)
         {
-            if (e.Elements().FirstOrDefault(c => (string?)c.Attribute("key") is "tableHeaderView" or "tableFooterView" or "backgroundView") is { } extra)
-                throw new CompileError($"table and collection view '{(string?)extra.Attribute("key")}'s are not supported");
-            if (e.Descendants("collectionReusableView").Any())
-                throw new CompileError("collection view section headers and footers are not supported");
+            var list = views.ToList();
+            if (list.Count == 0)
+                return;
+            int at = o.Items.FindIndex(i => i.Key == "UISubviews");
+            if (at >= 0)
+            {
+                ((NibArchive.Obj)o.Items[at].Value!).Items.AddRange(list.Select(v => ("UINibEncoderEmptyKey", (object?)v)));
+                return;
+            }
+            o.Items.Insert(o.Items.FindIndex(i => i.Key == "UICenter") + 1, ("UISubviews", Array("NSMutableArray", list)));
         }
 
         NibArchive.Obj TableView(XElement e) => View(e, "UITableView", o =>
         {
-            RejectAccessoryViews(e);
+            // Interface Builder doesn't archive a table's background view.
+            NibArchive.Obj? headerView = Keyed(e, "tableHeaderView") is { } h ? Element(h) : null;
+            NibArchive.Obj? footerView = Keyed(e, "tableFooterView") is { } f ? Element(f) : null;
+            AddAccessorySubviews(o, new[] { footerView, headerView }.OfType<NibArchive.Obj>());
             ScrollViewKeys(e, o);
             if (Bool(e, "alwaysBounceVertical", false))
                 o.Add("UIAlwaysBounceVertical", true);
@@ -1199,6 +1218,10 @@ public static class InterfaceBuilder
             o.Add("UIEstimatedSectionFooterHeight", (float)Num(e, "estimatedSectionFooterHeight", 0));
             o.Add("UIFillerRowHeight", new NibArchive.Double(0)).Add("UISectionHeaderTopPadding", new NibArchive.Double(-1));
             o.Add("UIInsetsContentViewsToSafeArea", true);
+            if (headerView is not null)
+                o.Add("UITableHeaderView", headerView);
+            if (footerView is not null)
+                o.Add("UITableFooterView", footerView);
             switch ((string?)e.Attribute("dataMode") ?? "prototypes")
             {
                 case "prototypes":
@@ -1243,13 +1266,15 @@ public static class InterfaceBuilder
         // Prototype cells: each compiled into its own nib, which UIKit instantiates per reuse. References
         // from a cell to objects outside it (the controller, segue templates) go through the cell nib's
         // upstream placeholders, mapped to this nib's objects.
-        (NibArchive.Obj Nibs, NibArchive.Obj Externals) PrototypeNibs(List<XElement> cells)
+        (NibArchive.Obj Nibs, NibArchive.Obj Externals) PrototypeNibs(List<XElement> cells, Func<string, string>? key = null)
         {
             var nibs = new List<(NibArchive.Obj, NibArchive.Obj)>();
             var tables = new List<(NibArchive.Obj, NibArchive.Obj)>();
             foreach (var cell in cells)
             {
-                string reuse = (string?)cell.Attribute("reuseIdentifier") ?? throw new CompileError("a prototype cell has no reuse identifier");
+                string reuse = (string?)cell.Attribute("reuseIdentifier") ?? throw new CompileError($"a prototype {cell.Name.LocalName} has no reuse identifier");
+                if (key is not null)
+                    reuse = key(reuse);
                 var inner = new NibBuilder(document);
                 foreach (var (alias, target) in aliases)
                     inner.Alias(alias, target);
@@ -1325,23 +1350,65 @@ public static class InterfaceBuilder
 
         NibArchive.Obj CollectionView(XElement e) => View(e, "UICollectionView", o =>
         {
-            RejectAccessoryViews(e);
+            NibArchive.Obj? background = Keyed(e, "backgroundView") is { } b ? Element(b) : null;
+            AddAccessorySubviews(o, new[] { background }.OfType<NibArchive.Obj>());
             ScrollViewKeys(e, o);
             o.Add("UIDelegate", null);
-            var layout = e.Elements("collectionViewFlowLayout").FirstOrDefault(l => (string?)l.Attribute("key") == "collectionViewLayout")
-                ?? throw new CompileError("only collection views with a flow layout are supported");
-            o.Add("UICollectionLayout", FlowLayout(layout));
+            o.Add("UICollectionLayout", CollectionLayout(Keyed(e, "collectionViewLayout")
+                ?? throw new CompileError("a collection view has no layout")));
+            if (background is not null)
+                o.Add("UIBackgroundView", background);
             o.Add("UIAllowsUserInitiatedMultipleSelection", true);
             if ((string?)e.Attribute("dataMode") is { } mode && mode != "prototypes")
                 throw new CompileError($"collection view dataMode '{mode}' is not supported");
             var cells = e.Element("cells")?.Elements("collectionViewCell").ToList() ?? [];
-            if (cells.Count > 0)
+            // Section headers and footers: nibs like the cells', keyed "<element kind>/<reuse identifier>".
+            var supplementary = e.Elements("collectionReusableView").OrderBy(v => (string?)v.Attribute("key") == "sectionFooterView" ? 0 : 1).ToList();
+            foreach (var v in supplementary)
+                if ((string?)v.Attribute("key") is not ("sectionHeaderView" or "sectionFooterView"))
+                    throw new CompileError($"collection view '{(string?)v.Attribute("key")}' supplementary views are not supported (only section headers and footers)");
+            (NibArchive.Obj Nibs, NibArchive.Obj Externals)? cellNibs = cells.Count > 0 ? PrototypeNibs(cells) : null;
+            var supplementaryNibs = new List<(NibArchive.Obj Nibs, NibArchive.Obj Externals)>();
+            foreach (var v in supplementary)
             {
-                var (nibs, externals) = PrototypeNibs(cells);
-                o.Add("UICollectionViewCellPrototypeNibExternalObjects", externals).Add("UICollectionViewCellNibDict", nibs);
+                string kind = (string?)v.Attribute("key") == "sectionHeaderView" ? "UICollectionElementKindSectionHeader" : "UICollectionElementKindSectionFooter";
+                supplementaryNibs.Add(PrototypeNibs([v], reuse => kind + "/" + reuse));
             }
+            static NibArchive.Obj Merge(IEnumerable<NibArchive.Obj> dictionaries)
+            {
+                var merged = new NibArchive.Obj("NSMutableDictionary").Add("NSInlinedValue", true);
+                foreach (var d in dictionaries)
+                    merged.Items.AddRange(d.Items.Where(i => i.Key != "NSInlinedValue"));
+                return merged;
+            }
+            if (cellNibs is { } c)
+                o.Add("UICollectionViewCellPrototypeNibExternalObjects", c.Externals);
+            if (supplementaryNibs.Count > 0)
+                o.Add("UICollectionViewSupplementaryViewPrototypeNibExternalObjects", Merge(supplementaryNibs.Select(n => n.Externals)));
+            if (cellNibs is { } c2)
+                o.Add("UICollectionViewCellNibDict", c2.Nibs);
+            if (supplementaryNibs.Count > 0)
+                o.Add("UICollectionViewSupplementaryViewNibDict", Merge(supplementaryNibs.Select(n => n.Nibs)));
             o.Add("UICollectionViewPrefetchingEnabled", Bool(e, "prefetchingEnabled", true));
         });
+
+        // A flow layout, or a layout of a custom class: Interface Builder archives a custom class's
+        // name only (even for a flow layout subclass, whose flow settings it drops).
+        NibArchive.Obj CollectionLayout(XElement l)
+        {
+            if ((string?)l.Attribute("customClass") is { } custom)
+            {
+                var swapper = new NibArchive.Obj("UIClassSwapper").Add("UIClassName", String(custom))
+                    .Add("UIOriginalClassName", String(l.Name.LocalName == "collectionViewFlowLayout" ? "UICollectionViewFlowLayout" : "UICollectionViewLayout"));
+                Track(swapper, (string?)l.Attribute("id"));
+                return swapper;
+            }
+            return l.Name.LocalName switch
+            {
+                "collectionViewFlowLayout" => FlowLayout(l),
+                var n => throw new CompileError($"collection view layout '{n}' without a custom class is not supported (use a flow layout, or set the layout's class)"),
+            };
+        }
 
         NibArchive.Obj FlowLayout(XElement l)
         {
@@ -1391,22 +1458,217 @@ public static class InterfaceBuilder
             });
         }
 
-        NibArchive.Obj TapRecognizer(XElement e)
+        // Gesture recognizers. Interface Builder archives the values that differ from UIKit's defaults.
+        NibArchive.Obj GestureRecognizer(XElement e)
         {
-            foreach (var a in new[] { "numberOfTapsRequired", "numberOfTouchesRequired" })
-                if (Num(e, a, 1) != 1)
-                    throw new CompileError($"tap gesture recognizers with {a} other than 1 are not supported");
-            var o = new NibArchive.Obj("UITapGestureRecognizer");
+            string type = e.Name.LocalName;
+            string className = type switch
+            {
+                "tapGestureRecognizer" => "UITapGestureRecognizer",
+                "panGestureRecognizer" => "UIPanGestureRecognizer",
+                "swipeGestureRecognizer" => "UISwipeGestureRecognizer",
+                "pinchGestureRecognizer" => "UIPinchGestureRecognizer",
+                "rotationGestureRecognizer" => "UIRotationGestureRecognizer",
+                "pongPressGestureRecognizer" => "UILongPressGestureRecognizer", // (sic) Interface Builder's element name
+                "screenEdgePanGestureRecognizer" => "UIScreenEdgePanGestureRecognizer",
+                _ => throw new CompileError($"'{type}' gesture recognizers are not supported (only tap, pan, swipe, pinch, rotation, long press and screen edge)"),
+            };
+            var o = new NibArchive.Obj((string?)e.Attribute("customClass") ?? className);
             Track(o, (string?)e.Attribute("id"));
-            o.Add("UIGestureRecognizer.allowedTouchTypes", 15).Add("UIGestureRecognizer.requiresExclusiveTouchType", true)
-                .Add("UITapGestureRecognizer._imp", new NibArchive.Obj("UITapRecognizer"));
             if (!Bool(e, "enabled", true))
-                o.Add("UIGestureRecognizer.enabled", false);
+                o.Add("UIGestureRecognizer.disabled", true);
             if (!Bool(e, "cancelsTouchesInView", true))
                 o.Add("UIGestureRecognizer.cancelsTouchesInView", false);
+            if (Bool(e, "delaysTouchesBegan", false))
+                o.Add("UIGestureRecognizer.delaysTouchesBegan", true);
+            bool delaysEnded = Bool(e, "delaysTouchesEnded", true);
+            if (!delaysEnded)
+                o.Add("UIGestureRecognizer.delaysTouchesEnded", false);
+            // Screen edge pans don't take indirect (trackpad) touches. Interface Builder clears
+            // requiresExclusiveTouchType along with delaysTouchesEnded.
+            o.Add("UIGestureRecognizer.allowedTouchTypes", className == "UIScreenEdgePanGestureRecognizer" ? 11 : 15)
+                .Add("UIGestureRecognizer.requiresExclusiveTouchType", delaysEnded);
+
+            // The tap counting a tap or long press recognizer delegates to.
+            NibArchive.Obj TapImp(int defaultTaps)
+            {
+                var imp = new NibArchive.Obj("UITapRecognizer");
+                int taps = (int)Num(e, "numberOfTapsRequired", defaultTaps), touches = (int)Num(e, "numberOfTouchesRequired", 1);
+                if (taps != 1)
+                    imp.Add("UITapRecognizer.numberOfTapsRequired", taps);
+                if (touches != 1)
+                    imp.Add("UITapRecognizer.numberOfTouchesRequired", touches);
+                return imp;
+            }
+            void Pan(string prefix)
+            {
+                if (Num(e, "minimumNumberOfTouches", 1) != 1)
+                    o.Add(prefix + ".minimumNumberOfTouches", (int)Num(e, "minimumNumberOfTouches"));
+                if (e.Attribute("maximumNumberOfTouches") is not null)
+                    o.Add(prefix + ".maximumNumberOfTouches", (int)Num(e, "maximumNumberOfTouches"));
+                o.Add("UIPanGestureRecognizer.allowedScrollTypesMask", 0);
+            }
+            switch (type)
+            {
+                case "tapGestureRecognizer":
+                    o.Add("UITapGestureRecognizer._imp", TapImp(1));
+                    break;
+                case "pongPressGestureRecognizer":
+                    o.Add("UILongPressGestureRecognizer._imp", TapImp(0));
+                    if (Num(e, "numberOfTouchesRequired", 1) != 1)
+                        o.Add("UILongPressGestureRecognizer.numberOfTouchesRequired", (int)Num(e, "numberOfTouchesRequired"));
+                    if (Num(e, "minimumPressDuration", 0.5) != 0.5)
+                        o.Add("UILongPressGestureRecognizer.minimumPressDuration", (float)Num(e, "minimumPressDuration"));
+                    if (Num(e, "allowableMovement", 10) != 10)
+                        o.Add("UILongPressGestureRecognizer.allowableMovement", (float)Num(e, "allowableMovement"));
+                    break;
+                case "panGestureRecognizer":
+                    Pan("UIPanGestureRecognizer");
+                    break;
+                case "screenEdgePanGestureRecognizer":
+                {
+                    Pan("UIPanGestureRecognizer");
+                    var edge = e.Elements("rectEdge").FirstOrDefault(r => (string?)r.Attribute("key") == "edges");
+                    int edges = (Bool(edge, "top", false) ? 1 : 0) | (Bool(edge, "left", false) ? 2 : 0) | (Bool(edge, "bottom", false) ? 4 : 0) | (Bool(edge, "right", false) ? 8 : 0);
+                    o.Add("UIScreenEdgePanGestureRecognizer.edges", edges);
+                    break;
+                }
+                case "swipeGestureRecognizer":
+                {
+                    if (Num(e, "numberOfTouchesRequired", 1) != 1)
+                        o.Add("UISwipeGestureRecognizer.numberOfTouchesRequired", (int)Num(e, "numberOfTouchesRequired"));
+                    int direction = (string?)e.Attribute("direction") switch
+                    {
+                        null or "right" => 1, "left" => 2, "up" => 4, "down" => 8,
+                        var d => throw new CompileError($"unknown swipe direction '{d}'"),
+                    };
+                    if (direction != 1)
+                        o.Add("UISwipeGestureRecognizer.direction", direction);
+                    break;
+                }
+            }
             CollectConnections(e, o);
             return o;
         }
+
+        // --- pickers, maps and web views -------------------------------------------------
+
+        NibArchive.Obj DatePicker(XElement e) => View(e, "UIDatePicker", o =>
+        {
+            ControlKeys(e, o);
+            string? style = (string?)e.Attribute("style");
+            // Interface Builder gives a wheels picker its natural height, 216 points.
+            if (style == "wheels")
+            {
+                var (x, y, w, _) = Frame(e);
+                o.Items[o.Items.FindIndex(i => i.Key == "UIBounds")] = ("UIBounds", Geometry(0, 0, w, 216));
+                o.Items[o.Items.FindIndex(i => i.Key == "UICenter")] = ("UICenter", Geometry(x + w / 2, y + 108));
+            }
+            // A compact picker's centred content is archived as trailing.
+            if (style == "compact" && (string?)e.Attribute("contentHorizontalAlignment") is null or "center")
+                o.Add("UIContentHorizontalAlignment", 5);
+            int pickerStyle = style switch
+            {
+                null or "automatic" => 0, "wheels" => 1, "compact" => 2, "inline" => 3,
+                var x => throw new CompileError($"unknown date picker style '{x}'"),
+            };
+            if (pickerStyle != 0)
+                o.Add("UIPickerStyle", pickerStyle);
+            string mode = (string?)e.Attribute("datePickerMode") ?? "dateAndTime";
+            int modeValue = mode switch
+            {
+                "time" => 0, "date" => 1, "dateAndTime" => 2, "countDownTimer" => 3,
+                var x => throw new CompileError($"unknown datePickerMode '{x}'"),
+            };
+            if (modeValue != 2)
+                o.Add("UIDatePickerMode", modeValue);
+            if (e.Elements("locale").FirstOrDefault(l => (string?)l.Attribute("key") == "locale") is { } locale)
+                o.Add("UILocale", new NibArchive.Obj("NSLocale").Add("NS.identifier", String((string)locale.Attribute("localeIdentifier")!)));
+            NibArchive.Obj? Date(string key) => e.Elements("date").FirstOrDefault(d => (string?)d.Attribute("key") == key) is { } d
+                ? new NibArchive.Obj("NSDate").Add("NS.time", new NibArchive.Double(Num(d, "timeIntervalSinceReferenceDate"))) : null;
+            if (Date("minimumDate") is { } min)
+                o.Add("UIMinimumDate", min);
+            if (Date("maximumDate") is { } max)
+                o.Add("UIMaximumDate", max);
+            // The picker's date isn't archived: it starts at the current date (a countdown timer, at zero).
+            int interval = (int)Num(e, "minuteInterval", 1);
+            o.Add("UIMinuteInterval", mode == "date" || interval == 1 ? 0 : interval);
+            if (mode == "countDownTimer")
+                o.Add("UIDatePickerUseCurrentDateDuringDecoding", false);
+        });
+
+        // MapKit's view; the app must link MapKit (it does when its code uses a MapKit type).
+        NibArchive.Obj MapView(XElement e) => View(e, "MKMapView", o =>
+        {
+            int type = (string?)e.Attribute("mapType") switch
+            {
+                null or "standard" => 0, "satellite" => 1, "hybrid" => 2, "satelliteFlyover" => 3, "hybridFlyover" => 4, "mutedStandard" => 5,
+                var x => throw new CompileError($"unknown mapType '{x}'"),
+            };
+            bool traffic = Bool(e, "showsTraffic", false);
+            o.Add("MKDelegate", null).Add("MKMapType", type)
+                .Add("MKZoomEnabled", Bool(e, "zoomEnabled", true)).Add("MKScrollEnabled", Bool(e, "scrollEnabled", true))
+                .Add("MKShowsUserLocation", Bool(e, "showsUserLocation", false))
+                .Add("MKPitchEnabled", Bool(e, "pitchEnabled", true)).Add("MKRotateEnabled", Bool(e, "rotateEnabled", true))
+                .Add("MKShowsBuildings", true) // archived as shown whatever the setting (the property is deprecated)
+                .Add("MKShowsTraffic", traffic).Add("MKShowsCompass", Bool(e, "showsCompass", true))
+                .Add("MKShowsScaleKey", Bool(e, "showsScale", false)).Add("MKShowsPointsOfInterest", Bool(e, "showsPointsOfInterest", true))
+                .Add("MKPointOfInterestFilter", null);
+            var configuration = new NibArchive.Obj(type switch { 0 or 5 => "MKStandardMapConfiguration", 1 or 3 => "MKImageryMapConfiguration", _ => "MKHybridMapConfiguration" })
+                .Add("MKMapConfigurationElevationStyle", type is 3 or 4 ? 1 : 0)
+                .Add("MKMapConfigurationShowsTraffic", traffic).Add("MKMapConfigurationShowsHiking", false)
+                .Add("MKMapConfigurationShowsTopographicFeatures", false).Add("MKMapConfigurationPointOfInterestFilter", null);
+            if (type is 0 or 5)
+                configuration.Add("MKStandardMapConfigurationEmphasisStyle", type == 5 ? 1 : 0);
+            o.Add("MKPreferredConfiguration", configuration).Add("MKPitchButtonVisibility", 1).Add("MKShowsUserTrackingButton", false);
+        });
+
+        // WebKit's view, with its archived configuration; the app must link WebKit.
+        NibArchive.Obj WebView(XElement e) => View(e, "WKWebView", o =>
+        {
+            var c = e.Elements("wkWebViewConfiguration").FirstOrDefault(x => (string?)x.Attribute("key") == "configuration");
+            var p = c?.Elements("wkPreferences").FirstOrDefault(x => (string?)x.Attribute("key") == "preferences");
+            int detectors = 127; // Interface Builder's default: every kind
+            if (c?.Elements("dataDetectorTypes").FirstOrDefault(x => (string?)x.Attribute("key") == "dataDetectorTypes") is { } d)
+            {
+                detectors = 0;
+                foreach (var (name, bit) in new[] { ("phoneNumber", 1), ("link", 2), ("address", 4), ("calendarEvent", 8), ("trackingNumber", 16), ("flightNumber", 32), ("lookupSuggestion", 64) })
+                    if (Bool(d, name, false))
+                        detectors |= bit;
+                if (Bool(d, "all", false))
+                    detectors = 127;
+            }
+            var media = c?.Elements("audiovisualMediaTypes").FirstOrDefault(x => (string?)x.Attribute("key") == "mediaTypesRequiringUserActionForPlayback");
+            // Archived as a flag: whether any media type needs a user action.
+            bool userActionForMedia = media is not null && !Bool(media, "none", false) && (Bool(media, "audio", false) || Bool(media, "video", false) || Bool(media, "all", false));
+            var preferences = new NibArchive.Obj("WKPreferences")
+                .Add("minimumFontSize", new NibArchive.Double(Num(p, "minimumFontSize", 0)))
+                .Add("javaScriptCanOpenWindowsAutomatically", Bool(p, "javaScriptCanOpenWindowsAutomatically", false))
+                .Add("javaScriptEnabled", Bool(p, "javaScriptEnabled", true)).Add("textInteractionEnabled", true).Add("shouldPrintBackgrounds", false);
+            var configuration = new NibArchive.Obj("WKWebViewConfiguration")
+                .Add("processPool", new NibArchive.Obj("WKProcessPool")).Add("preferences", preferences)
+                .Add("userContentController", new NibArchive.Obj("WKUserContentController"))
+                .Add("websiteDataStore", new NibArchive.Obj("WKWebsiteDataStore").Add("isDefaultDataStore", true))
+                .Add("suppressesIncrementalRendering", Bool(c, "suppressesIncrementalRendering", false))
+                .Add("applicationNameForUserAgent", String((string?)c?.Attribute("applicationNameForUserAgent") ?? ""))
+                .Add("allowsAirPlayForMediaPlayback", Bool(c, "allowsAirPlayForMediaPlayback", true))
+                .Add("drawsBackground", true).Add("dataDetectorTypes", detectors)
+                .Add("allowsInlineMediaPlayback", Bool(c, "allowsInlineMediaPlayback", false))
+                .Add("allowsInlineMediaPlaybackAfterFullscreen", false)
+                .Add("mediaTypesRequiringUserActionForPlayback", userActionForMedia)
+                .Add("selectionGranularity", 0)
+                .Add("allowsPictureInPictureMediaPlayback", Bool(c, "allowsPictureInPictureMediaPlayback", true))
+                .Add("ignoresViewportScaleLimits", Bool(c, "ignoresViewportScaleLimits", false))
+                .Add("dragLiftDelay", 0).Add("textInteractionGesturesEnabled", true).Add("longPressActionsEnabled", true)
+                .Add("systemPreviewEnabled", false).Add("shouldDecidePolicyBeforeLoadingQuickLookPreview", true)
+                .Add("scrollToTextFragmentMarkingEnabled", true).Add("multiRepresentationHEICInsertionEnabled", false)
+                .Add("scrollToTextFragmentIndicatorEnabled", true);
+            o.Add("configuration", configuration)
+                .Add("allowsBackForwardNavigationGestures", Bool(e, "allowsBackForwardNavigationGestures", false))
+                .Add("customUserAgent", String((string?)e.Attribute("customUserAgent") ?? ""))
+                .Add("allowsLinkPreview", Bool(e, "allowsLinkPreview", true))
+                .Add("findInteractionEnabled", Bool(e, "findInteractionEnabled", false));
+        });
 
         // --- bars and items ----------------------------------------------------------------
 

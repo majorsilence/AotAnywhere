@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="23504" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="NAV">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="23506"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="WKWebView" minToolsVersion="11.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <scene sceneID="S0">
+            <objects>
+                <navigationController id="NAV" sceneMemberID="viewController">
+                    <navigationBar key="navigationBar" contentMode="scaleToFill" id="NB">
+                        <rect key="frame" x="0.0" y="59" width="393" height="44"/>
+                        <autoresizingMask key="autoresizingMask"/>
+                    </navigationBar>
+                    <connections>
+                        <segue destination="FEAT" kind="relationship" relationship="rootViewController" id="R0"/>
+                    </connections>
+                </navigationController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="FR0" sceneMemberID="firstResponder"/>
+            </objects>
+        </scene>
+        <scene sceneID="S1">
+            <objects>
+                <viewController id="FEAT" customClass="MoreViewController" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="V">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <pickerView contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="PK">
+                                <rect key="frame" x="20" y="103" width="353" height="120"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="120" id="k1"/>
+                                </constraints>
+                                <connections>
+                                    <outlet property="dataSource" destination="FEAT" id="o1"/>
+                                    <outlet property="delegate" destination="FEAT" id="o2"/>
+                                </connections>
+                            </pickerView>
+                            <datePicker contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" datePickerMode="date" style="compact" minuteInterval="5" translatesAutoresizingMaskIntoConstraints="NO" id="DP">
+                                <rect key="frame" x="20" y="233" width="353" height="34"/>
+                                <date key="date" timeIntervalSinceReferenceDate="750000000">
+                                    <!--2024-10-07 13:20:00 +0000-->
+                                </date>
+                                <connections>
+                                    <action selector="dateChanged:" destination="FEAT" eventType="valueChanged" id="a0"/>
+                                </connections>
+                            </datePicker>
+                            <mapView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" mapType="standard" translatesAutoresizingMaskIntoConstraints="NO" id="MAP">
+                                <rect key="frame" x="20" y="277" width="353" height="150"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="150" id="k2"/>
+                                </constraints>
+                            </mapView>
+                            <wkWebView contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="WEB">
+                                <rect key="frame" x="20" y="437" width="353" height="120"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="120" id="k3"/>
+                                </constraints>
+                                <wkWebViewConfiguration key="configuration">
+                                    <audiovisualMediaTypes key="mediaTypesRequiringUserActionForPlayback" none="YES"/>
+                                    <wkPreferences key="preferences"/>
+                                </wkWebViewConfiguration>
+                            </wkWebView>
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="GV">
+                                <rect key="frame" x="20" y="567" width="353" height="100"/>
+                                <color key="backgroundColor" systemColor="systemGray5Color"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" constant="100" id="k4"/>
+                                </constraints>
+                                <connections>
+                                    <outletCollection property="gestureRecognizers" destination="PAN" appends="YES" id="g1"/>
+                                    <outletCollection property="gestureRecognizers" destination="SW" appends="YES" id="g2"/>
+                                    <outletCollection property="gestureRecognizers" destination="PI" appends="YES" id="g3"/>
+                                    <outletCollection property="gestureRecognizers" destination="RO" appends="YES" id="g4"/>
+                                    <outletCollection property="gestureRecognizers" destination="LP" appends="YES" id="g5"/>
+                                    <outletCollection property="gestureRecognizers" destination="DT" appends="YES" id="g6"/>
+                                </connections>
+                            </view>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="SA"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="PK" firstAttribute="top" secondItem="SA" secondAttribute="top" id="c1"/>
+                            <constraint firstItem="PK" firstAttribute="leading" secondItem="SA" secondAttribute="leading" constant="20" id="c2"/>
+                            <constraint firstItem="SA" firstAttribute="trailing" secondItem="PK" secondAttribute="trailing" constant="20" id="c3"/>
+                            <constraint firstItem="DP" firstAttribute="top" secondItem="PK" secondAttribute="bottom" constant="10" id="c4"/>
+                            <constraint firstItem="DP" firstAttribute="leading" secondItem="PK" secondAttribute="leading" id="c5"/>
+                            <constraint firstItem="DP" firstAttribute="trailing" secondItem="PK" secondAttribute="trailing" id="c6"/>
+                            <constraint firstItem="MAP" firstAttribute="top" secondItem="DP" secondAttribute="bottom" constant="10" id="c7"/>
+                            <constraint firstItem="MAP" firstAttribute="leading" secondItem="PK" secondAttribute="leading" id="c8"/>
+                            <constraint firstItem="MAP" firstAttribute="trailing" secondItem="PK" secondAttribute="trailing" id="c9"/>
+                            <constraint firstItem="WEB" firstAttribute="top" secondItem="MAP" secondAttribute="bottom" constant="10" id="c10"/>
+                            <constraint firstItem="WEB" firstAttribute="leading" secondItem="PK" secondAttribute="leading" id="c11"/>
+                            <constraint firstItem="WEB" firstAttribute="trailing" secondItem="PK" secondAttribute="trailing" id="c12"/>
+                            <constraint firstItem="GV" firstAttribute="top" secondItem="WEB" secondAttribute="bottom" constant="10" id="c13"/>
+                            <constraint firstItem="GV" firstAttribute="leading" secondItem="PK" secondAttribute="leading" id="c14"/>
+                            <constraint firstItem="GV" firstAttribute="trailing" secondItem="PK" secondAttribute="trailing" id="c15"/>
+                        </constraints>
+                        <connections>
+                            <outletCollection property="gestureRecognizers" destination="SE" appends="YES" id="g7"/>
+                        </connections>
+                    </view>
+                    <navigationItem key="navigationItem" title="More" id="NI"/>
+                    <connections>
+                        <outlet property="picker" destination="PK" id="o3"/>
+                        <outlet property="datePicker" destination="DP" id="o4"/>
+                        <outlet property="map" destination="MAP" id="o5"/>
+                        <outlet property="web" destination="WEB" id="o6"/>
+                        <outlet property="gestureView" destination="GV" id="o7"/>
+                        <segue destination="TBL" kind="show" identifier="table" id="s1"/>
+                        <segue destination="FLOW" kind="show" identifier="flow" id="s2"/>
+                        <segue destination="CUST" kind="show" identifier="custom" id="s3"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="FR1" sceneMemberID="firstResponder"/>
+                <panGestureRecognizer minimumNumberOfTouches="1" maximumNumberOfTouches="2" id="PAN">
+                    <connections>
+                        <action selector="panned:" destination="FEAT" id="a1"/>
+                    </connections>
+                </panGestureRecognizer>
+                <swipeGestureRecognizer direction="left" numberOfTouchesRequired="2" id="SW">
+                    <connections>
+                        <action selector="swiped:" destination="FEAT" id="a2"/>
+                    </connections>
+                </swipeGestureRecognizer>
+                <pinchGestureRecognizer id="PI">
+                    <connections>
+                        <action selector="pinched:" destination="FEAT" id="a3"/>
+                    </connections>
+                </pinchGestureRecognizer>
+                <rotationGestureRecognizer id="RO">
+                    <connections>
+                        <action selector="rotated:" destination="FEAT" id="a4"/>
+                    </connections>
+                </rotationGestureRecognizer>
+                <pongPressGestureRecognizer allowableMovement="12" minimumPressDuration="0.75" id="LP">
+                    <connections>
+                        <action selector="longPressed:" destination="FEAT" id="a5"/>
+                    </connections>
+                </pongPressGestureRecognizer>
+                <tapGestureRecognizer numberOfTapsRequired="2" numberOfTouchesRequired="2" id="DT">
+                    <connections>
+                        <action selector="doubleTapped:" destination="FEAT" id="a6"/>
+                    </connections>
+                </tapGestureRecognizer>
+                <screenEdgePanGestureRecognizer minimumNumberOfTouches="1" id="SE">
+                    <rectEdge key="edges" left="YES"/>
+                    <connections>
+                        <action selector="edgePanned:" destination="FEAT" id="a7"/>
+                    </connections>
+                </screenEdgePanGestureRecognizer>
+            </objects>
+        </scene>
+        <scene sceneID="S2">
+            <objects>
+                <tableViewController id="TBL" customClass="HeaderTableController" sceneMemberID="viewController">
+                    <tableView key="view" clipsSubviews="YES" contentMode="scaleToFill" alwaysBounceVertical="YES" dataMode="prototypes" style="plain" separatorStyle="default" rowHeight="-1" estimatedRowHeight="-1" sectionHeaderHeight="28" sectionFooterHeight="28" id="TV">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <view key="tableHeaderView" contentMode="scaleToFill" id="THV">
+                            <rect key="frame" x="0.0" y="0.0" width="393" height="60"/>
+                            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                            <subviews>
+                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" fixedFrame="YES" text="Header" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="THL">
+                                    <rect key="frame" x="20" y="20" width="200" height="21"/>
+                                    <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                    <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                    <nil key="textColor"/>
+                                    <nil key="highlightedColor"/>
+                                </label>
+                            </subviews>
+                            <color key="backgroundColor" systemColor="systemYellowColor"/>
+                        </view>
+                        <view key="tableFooterView" contentMode="scaleToFill" id="TFV">
+                            <rect key="frame" x="0.0" y="0.0" width="393" height="40"/>
+                            <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                            <color key="backgroundColor" systemColor="systemGreenColor"/>
+                        </view>
+                        <prototypes>
+                            <tableViewCell clipsSubviews="YES" contentMode="scaleToFill" preservesSuperviewLayoutMargins="YES" selectionStyle="default" indentationWidth="10" reuseIdentifier="Row" textLabel="RL" style="IBUITableViewCellStyleDefault" id="ROW">
+                                <rect key="frame" x="0.0" y="110" width="393" height="43.666667938232422"/>
+                                <autoresizingMask key="autoresizingMask"/>
+                                <tableViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" preservesSuperviewLayoutMargins="YES" insetsLayoutMarginsFromSafeArea="NO" tableViewCell="ROW" id="RCV">
+                                    <rect key="frame" x="0.0" y="0.0" width="393" height="43.666667938232422"/>
+                                    <autoresizingMask key="autoresizingMask"/>
+                                    <subviews>
+                                        <label opaque="NO" multipleTouchEnabled="YES" contentMode="left" insetsLayoutMarginsFromSafeArea="NO" text="Row" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" id="RL">
+                                            <rect key="frame" x="20" y="0.0" width="353" height="43.666667938232422"/>
+                                            <autoresizingMask key="autoresizingMask"/>
+                                            <fontDescription key="fontDescription" type="system" pointSize="17"/>
+                                            <nil key="textColor"/>
+                                            <nil key="highlightedColor"/>
+                                        </label>
+                                    </subviews>
+                                </tableViewCellContentView>
+                            </tableViewCell>
+                        </prototypes>
+                        <connections>
+                            <outlet property="dataSource" destination="TBL" id="t1"/>
+                            <outlet property="delegate" destination="TBL" id="t2"/>
+                        </connections>
+                    </tableView>
+                </tableViewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="FR2" sceneMemberID="firstResponder"/>
+            </objects>
+        </scene>
+        <scene sceneID="S3">
+            <objects>
+                <collectionViewController id="FLOW" customClass="SectionsController" sceneMemberID="viewController">
+                    <collectionView key="view" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" dataMode="prototypes" id="FCV">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <collectionViewFlowLayout key="collectionViewLayout" minimumLineSpacing="10" minimumInteritemSpacing="10" id="FFL">
+                            <size key="itemSize" width="60" height="60"/>
+                            <size key="headerReferenceSize" width="50" height="40"/>
+                            <size key="footerReferenceSize" width="50" height="30"/>
+                            <inset key="sectionInset" minX="10" minY="10" maxX="10" maxY="10"/>
+                        </collectionViewFlowLayout>
+                        <cells>
+                            <collectionViewCell opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" reuseIdentifier="Item" id="ITEM">
+                                <rect key="frame" x="10" y="50" width="60" height="60"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <collectionViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" insetsLayoutMarginsFromSafeArea="NO" id="ICV">
+                                    <rect key="frame" x="0.0" y="0.0" width="60" height="60"/>
+                                    <autoresizingMask key="autoresizingMask"/>
+                                    <color key="backgroundColor" systemColor="systemBlueColor"/>
+                                </collectionViewCellContentView>
+                            </collectionViewCell>
+                        </cells>
+                        <collectionReusableView key="sectionHeaderView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" reuseIdentifier="Header" id="HDR">
+                            <rect key="frame" x="0.0" y="0.0" width="393" height="40"/>
+                            <autoresizingMask key="autoresizingMask"/>
+                            <color key="backgroundColor" systemColor="systemOrangeColor"/>
+                        </collectionReusableView>
+                        <collectionReusableView key="sectionFooterView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" reuseIdentifier="Footer" id="FTR">
+                            <rect key="frame" x="0.0" y="120" width="393" height="30"/>
+                            <autoresizingMask key="autoresizingMask"/>
+                            <color key="backgroundColor" systemColor="systemPinkColor"/>
+                        </collectionReusableView>
+                        <connections>
+                            <outlet property="dataSource" destination="FLOW" id="f1"/>
+                            <outlet property="delegate" destination="FLOW" id="f2"/>
+                        </connections>
+                    </collectionView>
+                </collectionViewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="FR3" sceneMemberID="firstResponder"/>
+            </objects>
+        </scene>
+        <scene sceneID="S4">
+            <objects>
+                <collectionViewController id="CUST" customClass="CustomLayoutController" sceneMemberID="viewController">
+                    <collectionView key="view" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" dataMode="prototypes" id="CCV">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <collectionViewLayout key="collectionViewLayout" id="CL" customClass="GridLayout"/>
+                        <cells>
+                            <collectionViewCell opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" reuseIdentifier="Cell" id="CCELL">
+                                <rect key="frame" x="0.0" y="0.0" width="50" height="50"/>
+                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
+                                <collectionViewCellContentView key="contentView" opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" insetsLayoutMarginsFromSafeArea="NO" id="CCC">
+                                    <rect key="frame" x="0.0" y="0.0" width="50" height="50"/>
+                                    <autoresizingMask key="autoresizingMask"/>
+                                    <color key="backgroundColor" systemColor="systemPurpleColor"/>
+                                </collectionViewCellContentView>
+                            </collectionViewCell>
+                        </cells>
+                        <connections>
+                            <outlet property="dataSource" destination="CUST" id="u1"/>
+                            <outlet property="delegate" destination="CUST" id="u2"/>
+                        </connections>
+                    </collectionView>
+                </collectionViewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="FR4" sceneMemberID="firstResponder"/>
+            </objects>
+        </scene>
+    </scenes>
+    <resources>
+        <systemColor name="systemBackgroundColor"><color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/></systemColor>
+        <systemColor name="systemGray5Color"><color red="0.89803921568627454" green="0.89803921568627454" blue="0.91764705882352937" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></systemColor>
+        <systemColor name="systemYellowColor"><color red="1" green="0.80000000000000004" blue="0.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></systemColor>
+        <systemColor name="systemGreenColor"><color red="0.20392156862745098" green="0.7803921568627451" blue="0.34901960784313724" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></systemColor>
+        <systemColor name="systemBlueColor"><color red="0.0" green="0.47843137254901963" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></systemColor>
+        <systemColor name="systemOrangeColor"><color red="1" green="0.58431372549019611" blue="0.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></systemColor>
+        <systemColor name="systemPinkColor"><color red="1" green="0.17647058823529413" blue="0.33333333333333331" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></systemColor>
+        <systemColor name="systemPurpleColor"><color red="0.68627450980392157" green="0.32156862745098042" blue="0.87058823529411766" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></systemColor>
+    </resources>
+</document>
