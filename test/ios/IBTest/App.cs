@@ -393,12 +393,23 @@ public class MoreViewController : UIViewController, IUIPickerViewDataSource, IUI
 
 		bool scripted = false;
 		web?.LoadHtmlString ("<html><body><p id='p'>hello</p></body></html>", null);
-		Log.After (2.0, () => {
+		// WebKit's processes can take several seconds to start on a freshly booted simulator: retry
+		// the script until the page has loaded, for up to 15 seconds.
+		int attempts = 0;
+		void TryScript ()
+		{
 			web?.EvaluateJavaScript ("document.getElementById('p').textContent + (40 + 2)", (result, error) => {
-				Log.Line ($"web script result={result} error={error?.LocalizedDescription}");
 				scripted = result?.ToString () == "hello42";
+				if (scripted || ++attempts >= 30)
+					Log.Line ($"web script result={result} error={error?.LocalizedDescription} attempts={attempts + (scripted ? 1 : 0)}");
+				else
+					Log.After (0.5, TryScript);
 			});
-			Log.After (1.0, () => {
+		}
+		TryScript ();
+		void AfterScript (Action next) => Log.After (0.5, () => { if (scripted || attempts >= 30) next (); else AfterScript (next); });
+		AfterScript (() => {
+			Log.After (0.1, () => {
 				Check (scripted, "web view loads and runs script");
 				PerformSegue ("table", this);
 				Log.After (1.5, () => {
